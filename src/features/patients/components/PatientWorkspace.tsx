@@ -5,6 +5,7 @@ import {
   Archive,
   ArrowLeft,
   BedIcon,
+  BellRing,
   ClipboardList,
   Download,
   ExternalLink,
@@ -42,6 +43,7 @@ import {
   listVitalRecords,
   openMedicalDocument,
   setRealtimeContext,
+  startNewPatientVisit,
   subscribeRealtime,
   type RealtimeEvent,
   updatePatient,
@@ -202,6 +204,13 @@ const patientTabVariants = {
   }),
 }
 
+const PATIENT_UPDATE_TOAST_DURATION_MS = 4200
+
+type PatientUpdateToast = {
+  id: string
+  detail: string
+}
+
 export function PatientWorkspace({
   patientId,
   currentAccount,
@@ -258,6 +267,8 @@ export function PatientWorkspace({
   )
   const [placementDialogOpen, setPlacementDialogOpen] = useState(false)
   const [placementBedId, setPlacementBedId] = useState("")
+  const [endVisitDialogOpen, setEndVisitDialogOpen] = useState(false)
+  const [newVisitDialogOpen, setNewVisitDialogOpen] = useState(false)
   const [vitalForm, setVitalForm] = useState<VitalFormState>(emptyVitalForm())
   const [editingVitalId, setEditingVitalId] = useState<string | null>(null)
   const [vitalDialogOpen, setVitalDialogOpen] = useState(false)
@@ -275,6 +286,9 @@ export function PatientWorkspace({
   const [evolutionForm, setEvolutionForm] = useState<EvolutionFormState>(
     emptyEvolutionForm(currentAccount)
   )
+  const [patientUpdateToast, setPatientUpdateToast] =
+    useState<PatientUpdateToast | null>(null)
+  const patientUpdateToastTimeoutRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     const previousTabIndex = previousTabIndexRef.current
@@ -403,10 +417,28 @@ export function PatientWorkspace({
     }
   }, [patientId])
 
+  const showPatientUpdateToast = useCallback((toast: PatientUpdateToast) => {
+    if (patientUpdateToastTimeoutRef.current !== undefined) {
+      window.clearTimeout(patientUpdateToastTimeoutRef.current)
+    }
+
+    setPatientUpdateToast(toast)
+    patientUpdateToastTimeoutRef.current = window.setTimeout(() => {
+      setPatientUpdateToast(null)
+      patientUpdateToastTimeoutRef.current = undefined
+    }, PATIENT_UPDATE_TOAST_DURATION_MS)
+  }, [])
+
   const handleRealtimeEvent = useCallback(
     (event: RealtimeEvent) => {
       if (event.patientId !== patientId) {
         return
+      }
+
+      const toast = patientUpdateToastFromRealtimeEvent(event)
+
+      if (toast) {
+        showPatientUpdateToast(toast)
       }
 
       if (event.entity === "patient") {
@@ -431,8 +463,17 @@ export function PatientWorkspace({
       refreshPatient,
       refreshPrescriptions,
       refreshVitals,
+      showPatientUpdateToast,
     ]
   )
+
+  useEffect(() => {
+    return () => {
+      if (patientUpdateToastTimeoutRef.current !== undefined) {
+        window.clearTimeout(patientUpdateToastTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setRealtimeContext({
@@ -792,8 +833,19 @@ export function PatientWorkspace({
       setPatientForm(patientToForm(updated))
       setPlacementBedId("")
       setPlacementDialogOpen(false)
+      setEndVisitDialogOpen(false)
       onPatientChanged()
     }, "Visite terminee")
+  }
+
+  async function handleStartNewVisit() {
+    await runAction(async () => {
+      const updated = await startNewPatientVisit(patientId)
+      setPatient(updated)
+      setPatientForm(patientToForm(updated))
+      setNewVisitDialogOpen(false)
+      onPatientChanged()
+    }, "Nouvelle visite creee")
   }
 
   async function handleArchivePatient() {
@@ -1087,9 +1139,38 @@ export function PatientWorkspace({
   }
 
   const hasActiveVisit = Boolean(patient.currentVisitId)
+  const placementButtonLabel = patient.bedId
+    ? "Changer de chambre"
+    : "Ajouter a une chambre"
 
   return (
     <div className="space-y-5">
+      <AnimatePresence>
+        {patientUpdateToast && (
+          <motion.div
+            key={patientUpdateToast.id}
+            aria-live="polite"
+            className="fixed top-4 left-1/2 z-50 w-[min(calc(100vw-2rem),28rem)] -translate-x-1/2"
+            initial={{ opacity: 0, y: -16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-background/95 px-4 py-3 text-sm shadow-lg shadow-foreground/10 backdrop-blur">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <BellRing className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium">Dossier patient mis a jour</p>
+                <p className="mt-0.5 break-words text-muted-foreground">
+                  {patientUpdateToast.detail}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="rounded-3xl border bg-muted/20 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
@@ -1108,16 +1189,29 @@ export function PatientWorkspace({
                     onClick={handleOpenPlacementDialog}
                   >
                     <BedIcon className="size-4" />
-                    Ajouter a une chambre
+                    {placementButtonLabel}
+                  </Button>
+                )}
+                {!hasActiveVisit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                    disabled={Boolean(patient.archivedAt)}
+                    onClick={() => setNewVisitDialogOpen(true)}
+                  >
+                    <Plus className="size-4" />
+                    Nouvelle visite
                   </Button>
                 )}
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="destructive"
                   size="sm"
                   className="w-fit"
                   disabled={!hasActiveVisit}
-                  onClick={() => void handleEndVisit()}
+                  onClick={() => setEndVisitDialogOpen(true)}
                 >
                   <Home className="size-4" />
                   Fin de visite
@@ -1180,7 +1274,7 @@ export function PatientWorkspace({
         <DialogContent className="sm:max-w-2xl">
           <form className="grid gap-4" onSubmit={handleAssignBed}>
             <DialogHeader>
-              <DialogTitle>Ajouter a une chambre</DialogTitle>
+              <DialogTitle>{placementButtonLabel}</DialogTitle>
               <DialogDescription>
                 {patient.lastName} {patient.firstName}
               </DialogDescription>
@@ -1269,6 +1363,68 @@ export function PatientWorkspace({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={endVisitDialogOpen}
+        onOpenChange={setEndVisitDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Fin de visite</DialogTitle>
+            <DialogDescription>
+              Confirmez que {patient.lastName} {patient.firstName} repart chez
+              lui. La chambre sera liberee.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEndVisitDialogOpen(false)}
+            >
+              <XCircle className="size-4" />
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleEndVisit()}
+            >
+              <Home className="size-4" />
+              Confirmer la fin de visite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={newVisitDialogOpen}
+        onOpenChange={setNewVisitDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nouvelle visite</DialogTitle>
+            <DialogDescription>
+              Confirmez la creation d'une nouvelle visite pour{" "}
+              {patient.lastName} {patient.firstName}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setNewVisitDialogOpen(false)}
+            >
+              <XCircle className="size-4" />
+              Annuler
+            </Button>
+            <Button type="button" onClick={() => void handleStartNewVisit()}>
+              <Plus className="size-4" />
+              Creer la visite
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
