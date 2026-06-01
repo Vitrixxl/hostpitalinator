@@ -15,6 +15,7 @@ import {
   Home,
   Pencil,
   Plus,
+  PlusIcon,
   Save,
   Stethoscope,
   Thermometer,
@@ -1203,10 +1204,10 @@ export function PatientWorkspace({
                 type="button"
                 variant="outline"
                 className="self-start"
+                size="icon"
                 onClick={() => navigate("/patients")}
               >
                 <ArrowLeft className="size-4" />
-                Retour
               </Button>
               <h2 className="font-heading text-2xl font-medium">
                 {patient.lastName} {patient.firstName}
@@ -1253,7 +1254,7 @@ export function PatientWorkspace({
                 disabled={Boolean(patient.archivedAt)}
                 onClick={handleOpenPlacementDialog}
               >
-                <BedIcon className="size-4" />
+                <PlusIcon className="size-4" />
                 {placementButtonLabel}
               </Button>
             )}
