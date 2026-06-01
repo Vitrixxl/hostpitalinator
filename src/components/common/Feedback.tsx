@@ -14,7 +14,7 @@ export function AlertMessage({
 
   return (
     <div
-      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+      className={`flex items-start gap-2 rounded-3xl border px-3 py-2 text-sm ${
         tone === "success"
           ? "border-primary/20 bg-primary/5 text-foreground"
           : "border-destructive/20 bg-destructive/5 text-destructive"
@@ -28,7 +28,7 @@ export function AlertMessage({
 
 export function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+    <div className="flex min-h-28 items-center justify-center rounded-3xl border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
       {label}
     </div>
   )

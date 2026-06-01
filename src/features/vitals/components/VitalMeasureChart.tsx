@@ -24,7 +24,7 @@ export function VitalMeasureChart({ panel }: { panel: VitalChartPanel }) {
   const maxDecimals = Math.max(...panel.lines.map((line) => line.decimals))
 
   return (
-    <div className="min-w-0 rounded-lg border bg-background p-3">
+    <div className="min-w-0 rounded-3xl border bg-background p-3">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-medium">{panel.title}</h3>

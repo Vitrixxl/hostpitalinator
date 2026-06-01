@@ -112,7 +112,7 @@ export function PrescriptionForm({
         {form.medications.map((medication, index) => (
           <div
             key={index}
-            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_minmax(7rem,0.35fr)_minmax(9rem,0.45fr)_auto]"
+            className="grid gap-2 rounded-3xl border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_minmax(7rem,0.35fr)_minmax(9rem,0.45fr)_auto]"
           >
             <Field label="Medicament" required>
               <MedicineSearchInput

@@ -30,7 +30,7 @@ export function PatientCreationPage({
 }) {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-3xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-heading text-2xl font-medium">
             Creation d'un nouveau patient
@@ -47,7 +47,7 @@ export function PatientCreationPage({
       {error && <AlertMessage message={error} />}
 
       <form className="space-y-4" onSubmit={onSubmit}>
-        <section className="rounded-lg border bg-background p-4">
+        <section className="rounded-3xl border bg-background p-4">
           <SectionTitle icon={UserPlus} title="Donnees administratives" />
           <PatientFormFields
             account={account}

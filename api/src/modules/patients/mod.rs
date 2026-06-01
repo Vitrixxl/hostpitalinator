@@ -34,6 +34,8 @@ pub struct Patient {
     pub email: Option<String>,
     pub administrative_info: Option<String>,
     pub current_service: String,
+    pub current_visit_id: Option<String>,
+    pub current_visit_started_at: Option<String>,
     pub bed_id: Option<String>,
     pub weight: Option<f64>,
     pub height: Option<f64>,
@@ -113,6 +115,7 @@ pub fn routes() -> Router<AppState> {
         .route("/patients", get(list_patients).post(create_patient))
         .route("/patients/{id}", get(get_patient).put(update_patient))
         .route("/patients/{id}/archive", patch(archive_patient))
+        .route("/patients/{id}/new-visit", patch(start_new_visit))
 }
 
 async fn list_patients(
@@ -262,9 +265,15 @@ async fn create_patient(
         INSERT INTO patients (
           id, first_name, last_name, birth_date, sex, address, apartment_number,
           phone_number, email,
-          administrative_info, current_service, bed_id, weight, height
+          administrative_info, current_service, current_visit_id, current_visit_started_at,
+          bed_id, weight, height
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          'VIS-' || strftime('%Y%m%d-%H%M%S', 'now') || '-' || lower(hex(randomblob(2))),
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+          ?, ?, ?
+        )
         RETURNING *
         "#,
     )
@@ -423,6 +432,47 @@ async fn archive_patient(
         &state,
         "patient",
         "archived",
+        patient.id.clone(),
+        Some(patient.id.clone()),
+        ["patients", "patient"],
+        &patient,
+    );
+
+    Ok(Json(patient))
+}
+
+async fn start_new_visit(
+    State(state): State<AppState>,
+    Extension(current_account): Extension<CurrentAccount>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Patient>> {
+    require_patient_scope(&state, &id, &current_account).await?;
+
+    let visit_service = services::canonical_service_name(&state, &current_account.service).await?;
+    let patient = sqlx::query_as::<_, Patient>(
+        r#"
+        UPDATE patients
+        SET current_service = ?,
+            current_visit_id = 'VIS-' || strftime('%Y%m%d-%H%M%S', 'now') || '-' || lower(hex(randomblob(2))),
+            current_visit_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+            bed_id = CASE WHEN current_service = ? THEN bed_id ELSE NULL END,
+            archived_at = NULL,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE id = ?
+        RETURNING *
+        "#,
+    )
+    .bind(&visit_service)
+    .bind(&visit_service)
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("Patient not found"))?;
+
+    publish_change(
+        &state,
+        "patient",
+        "updated",
         patient.id.clone(),
         Some(patient.id.clone()),
         ["patients", "patient"],

@@ -38,7 +38,7 @@ export function LabPanelDetailsDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="max-h-[60vh] overflow-auto rounded-lg border">
+            <div className="max-h-[60vh] overflow-auto rounded-3xl border">
               <Table>
                 <TableHeader>
                   <TableRow>

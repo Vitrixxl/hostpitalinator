@@ -79,7 +79,7 @@ export function AuthScreen({
   return (
     <main className="min-h-screen bg-muted/30 text-foreground">
       <div className="mx-auto flex min-h-screen w-full max-w-md items-center px-4 py-8">
-        <Card className="w-full rounded-lg">
+        <Card className="w-full rounded-3xl">
           <CardHeader>
             <div className="mb-2 flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">

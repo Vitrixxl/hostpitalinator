@@ -1015,7 +1015,7 @@ export function PatientWorkspace({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-lg border bg-muted/20 p-4">
+      <div className="rounded-3xl border bg-muted/20 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <h2 className="font-heading text-2xl font-medium">
@@ -1070,7 +1070,7 @@ export function PatientWorkspace({
         onValueChange={handleTabChange}
         className="gap-4"
       >
-        <TabsList className="flex h-auto w-full flex-wrap justify-start">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start rounded-3xl">
           {PATIENT_TABS.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
               <tab.icon className="size-4" />
@@ -1085,7 +1085,7 @@ export function PatientWorkspace({
               <PatientTabMotion key="summary" direction={tabDirection}>
           <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <form
-              className="grid gap-4 rounded-lg border bg-background p-4"
+              className="grid gap-4 rounded-3xl border bg-background p-4"
               onSubmit={handleUpdatePatient}
             >
               <SectionTitle
@@ -1108,7 +1108,7 @@ export function PatientWorkspace({
               />
             </form>
 
-            <section className="space-y-4 rounded-lg border bg-background p-4">
+            <section className="space-y-4 rounded-3xl border bg-background p-4">
               <SectionTitle icon={Activity} title="Dernieres donnees" />
               <div className="grid gap-3 sm:grid-cols-2">
                 <ClinicalValue
@@ -1180,7 +1180,7 @@ export function PatientWorkspace({
                 <EmptyState label="Aucune constante" />
               )}
             </div>
-            <div className="overflow-hidden rounded-lg border bg-background p-4">
+            <div className="overflow-hidden rounded-3xl border bg-background p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="font-heading text-sm font-medium">
                   Releve des constantes
@@ -1429,7 +1429,7 @@ export function PatientWorkspace({
             {activeTab === "prescriptions" && (
               <PatientTabMotion key="prescriptions" direction={tabDirection}>
           <section className="grid gap-4">
-            <div className="space-y-4 rounded-lg border bg-background p-4">
+            <div className="space-y-4 rounded-3xl border bg-background p-4">
               <SectionTitle
                 icon={ClipboardList}
                 title="Prescriptions"
@@ -1566,7 +1566,7 @@ export function PatientWorkspace({
             {activeTab === "labs" && (
               <PatientTabMotion key="labs" direction={tabDirection}>
           <section className="grid gap-4">
-            <div className="space-y-4 rounded-lg border bg-background p-4">
+            <div className="space-y-4 rounded-3xl border bg-background p-4">
               <SectionTitle
                 icon={FlaskConical}
                 title="Biologie"
@@ -1619,7 +1619,7 @@ export function PatientWorkspace({
                 </Field>
               </div>
               {labPanelFilter !== "all" && (
-                <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
+                <div className="grid gap-2 rounded-3xl border bg-muted/20 p-3">
                   <p className="text-xs font-medium text-muted-foreground">
                     Filtres de valeurs
                   </p>
@@ -1764,7 +1764,7 @@ export function PatientWorkspace({
             {activeTab === "documents" && (
               <PatientTabMotion key="documents" direction={tabDirection}>
           <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
-            <div className="space-y-4 rounded-lg border bg-background p-4">
+            <div className="space-y-4 rounded-3xl border bg-background p-4">
               <SectionTitle
                 icon={FileText}
                 title="Documents medicaux"
@@ -1793,7 +1793,7 @@ export function PatientWorkspace({
                 {documents.map((document) => (
                   <article
                     key={document.id}
-                    className="grid gap-3 rounded-lg border bg-muted/20 p-3 text-sm"
+                    className="grid gap-3 rounded-3xl border bg-muted/20 p-3 text-sm"
                   >
                     <div>
                       <p className="font-medium">{document.title}</p>
@@ -1833,7 +1833,7 @@ export function PatientWorkspace({
               {documents.length === 0 && <EmptyState label="Aucun document" />}
             </div>
             <form
-              className="grid content-start gap-3 rounded-lg border bg-background p-4"
+              className="grid content-start gap-3 rounded-3xl border bg-background p-4"
               onSubmit={handleAddDocument}
             >
               <SectionTitle icon={FileUp} title="Ajouter un document" />
@@ -1904,7 +1904,7 @@ export function PatientWorkspace({
               <PatientTabMotion key="evolution" direction={tabDirection}>
           {evolutionDraftOpen ? (
             <form
-              className="grid gap-4 rounded-lg border bg-background p-4"
+              className="grid gap-4 rounded-3xl border bg-background p-4"
               onSubmit={handleAddEvolution}
             >
               <div className="grid gap-1">
@@ -1945,12 +1945,12 @@ export function PatientWorkspace({
               </div>
             </form>
           ) : (
-            <section className="rounded-lg border bg-background p-4">
+            <section className="rounded-3xl border bg-background p-4">
               <SectionTitle icon={Activity} title="Evolution clinique" />
               <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
                 <button
                   type="button"
-                  className="group grid aspect-square min-h-56 place-items-center rounded-lg border border-dashed bg-card p-4 text-center text-primary shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="group grid aspect-square min-h-56 place-items-center rounded-3xl border border-dashed bg-card p-4 text-center text-primary shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   aria-label={
                     hasEvolutionDraft
                       ? "Reprendre la note en cours"
@@ -1978,7 +1978,7 @@ export function PatientWorkspace({
                   <button
                     key={note.id}
                     type="button"
-                    className="group grid aspect-square min-h-56 content-start overflow-hidden rounded-lg border bg-card p-4 text-left text-sm shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    className="group grid aspect-square min-h-56 content-start overflow-hidden rounded-3xl border bg-card p-4 text-left text-sm shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     aria-label={`Ouvrir la note du ${formatShortDateTime(
                       note.recordedAt
                     )}`}
@@ -2024,7 +2024,7 @@ export function PatientWorkspace({
                           {selectedEvolutionNote.author}
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="max-h-[60vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 leading-6 whitespace-pre-wrap">
+                      <div className="max-h-[60vh] overflow-y-auto rounded-3xl border bg-muted/20 p-4 leading-6 whitespace-pre-wrap">
                         {selectedEvolutionNote.content}
                       </div>
                     </div>

@@ -384,7 +384,7 @@ export function AdminPanel({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 rounded-3xl border bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="font-heading text-2xl font-medium">
             Administration
@@ -433,7 +433,7 @@ export function AdminPanel({
       )}
 
       <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-lg border bg-background p-4">
+        <div className="rounded-3xl border bg-background p-4">
           <SectionTitle icon={Building2} title="Services" />
           <Table>
             <TableHeader>
@@ -471,7 +471,7 @@ export function AdminPanel({
 
         <div className="space-y-4">
           <form
-            className="grid gap-3 rounded-lg border bg-background p-4"
+            className="grid gap-3 rounded-3xl border bg-background p-4"
             onSubmit={handleCreateService}
           >
             <SectionTitle icon={Plus} title="Nouveau service" />
@@ -491,7 +491,7 @@ export function AdminPanel({
           </form>
 
           <form
-            className="grid gap-3 rounded-lg border bg-background p-4"
+            className="grid gap-3 rounded-3xl border bg-background p-4"
             onSubmit={handleUpdateService}
           >
             <SectionTitle icon={Building2} title="Service selectionne" />
@@ -529,7 +529,7 @@ export function AdminPanel({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-lg border bg-background p-4">
+        <div className="rounded-3xl border bg-background p-4">
           <SectionTitle icon={BedIcon} title="Lits" />
           <Table>
             <TableHeader>
@@ -558,7 +558,7 @@ export function AdminPanel({
 
         <div className="space-y-4">
           <form
-            className="grid gap-3 rounded-lg border bg-background p-4"
+            className="grid gap-3 rounded-3xl border bg-background p-4"
             onSubmit={handleCreateBed}
           >
             <SectionTitle icon={Plus} title="Nouveau lit" />
@@ -574,7 +574,7 @@ export function AdminPanel({
           </form>
 
           <form
-            className="grid gap-3 rounded-lg border bg-background p-4"
+            className="grid gap-3 rounded-3xl border bg-background p-4"
             onSubmit={handleUpdateBed}
           >
             <SectionTitle icon={BedIcon} title="Lit selectionne" />
@@ -609,7 +609,7 @@ export function AdminPanel({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-lg border bg-background p-4">
+        <div className="rounded-3xl border bg-background p-4">
           <SectionTitle icon={Users} title="Utilisateurs" />
           <Table>
             <TableHeader>
@@ -646,7 +646,7 @@ export function AdminPanel({
 
         <div className="space-y-4">
           <form
-            className="grid gap-3 rounded-lg border bg-background p-4"
+            className="grid gap-3 rounded-3xl border bg-background p-4"
             onSubmit={handleCreateAccount}
           >
             <SectionTitle icon={UserPlus} title="Nouveau compte" />
@@ -663,7 +663,7 @@ export function AdminPanel({
           </form>
 
           <form
-            className="grid gap-3 rounded-lg border bg-background p-4"
+            className="grid gap-3 rounded-3xl border bg-background p-4"
             onSubmit={handleUpdateAccount}
           >
             <SectionTitle icon={UserCog} title="Compte selectionne" />
