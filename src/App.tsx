@@ -1,9 +1,14 @@
 import {
   type ChangeEvent,
+  type FocusEvent,
   type FormEvent,
+  type KeyboardEvent,
+  type InputHTMLAttributes,
   useCallback,
   useEffect,
+  useId,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import {
@@ -84,8 +89,10 @@ import {
   logout,
   openMedicalDocument,
   resetAccountPassword,
+  searchAddressSuggestions,
   setRealtimeContext,
   subscribeRealtime,
+  type AddressSuggestion,
   type RealtimeEvent,
   updateAccount,
   updateBed,
@@ -320,8 +327,6 @@ const DOCUMENT_CATEGORIES = Object.keys(
 const PATIENT_SEX_LABELS: Record<PatientSex, string> = {
   female: "Femme",
   male: "Homme",
-  other: "Autre",
-  unknown: "Non precise",
 }
 
 const PATIENT_SEXES = Object.keys(PATIENT_SEX_LABELS) as PatientSex[]
@@ -355,8 +360,8 @@ const PRESCRIPTION_STATUS_LABELS: Record<string, string> = {
 
 const PRESCRIPTION_STATUSES = Object.keys(PRESCRIPTION_STATUS_LABELS)
 const UNASSIGNED_BED_VALUE = "__unassigned__"
-const UNSELECTED_SEX_VALUE = "__sex_unselected__"
 const UNSELECTED_SERVICE_VALUE = "__service_unselected__"
+const ADDRESS_QUERY_MIN_LENGTH = 3
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null)
@@ -1003,6 +1008,8 @@ function PatientFormFields({
     onChange({ ...form, [field]: value })
   }
 
+  const addressInputId = useId()
+
   return (
     <div className="grid gap-3">
       <div className="grid gap-3 md:grid-cols-2">
@@ -1021,11 +1028,10 @@ function PatientFormFields({
           />
         </Field>
         <Field label="Date de naissance">
-          <Input
+          <FrenchDateInput
             required
-            type="date"
             value={form.birthDate}
-            onChange={(event) => updateField("birthDate", event.target.value)}
+            onValueChange={(birthDate) => updateField("birthDate", birthDate)}
           />
         </Field>
         <Field label="Sexe">
@@ -1056,14 +1062,15 @@ function PatientFormFields({
           />
         </Field>
         <div className="md:col-span-2">
-          <Field label="Adresse">
-            <Textarea
+          <div className="grid gap-1.5">
+            <Label htmlFor={addressInputId}>Adresse</Label>
+            <AddressAutocomplete
+              id={addressInputId}
               required={administrativeRequired}
-              className="min-h-20"
               value={form.address}
-              onChange={(event) => updateField("address", event.target.value)}
+              onChange={(address) => updateField("address", address)}
             />
-          </Field>
+          </div>
         </div>
         <Field label="Telephone">
           <Input
@@ -2158,14 +2165,13 @@ function PatientWorkspace({
                     </DialogDescription>
                   </DialogHeader>
                   <Field label="Date et heure">
-                    <Input
+                    <FrenchDateTimeInput
                       required
-                      type="datetime-local"
                       value={vitalForm.recordedAt}
-                      onChange={(event) =>
+                      onValueChange={(recordedAt) =>
                         setVitalForm((current) => ({
                           ...current,
-                          recordedAt: event.target.value,
+                          recordedAt,
                         }))
                       }
                     />
@@ -2241,14 +2247,13 @@ function PatientWorkspace({
                     }
                   />
                   <Field label="Dernieres selles">
-                    <Input
+                    <FrenchDateInput
                       required
-                      type="date"
                       value={vitalForm.lastStoolDate}
-                      onChange={(event) =>
+                      onValueChange={(lastStoolDate) =>
                         setVitalForm((current) => ({
                           ...current,
-                          lastStoolDate: event.target.value,
+                          lastStoolDate,
                         }))
                       }
                     />
@@ -2329,27 +2334,25 @@ function PatientWorkspace({
                   />
                 </Field>
                 <Field label="Debut min">
-                  <Input
+                  <FrenchDateInput
                     className="w-40 max-w-full"
-                    type="date"
                     value={prescriptionFilters.startDateFrom}
-                    onChange={(event) =>
+                    onValueChange={(startDateFrom) =>
                       setPrescriptionFilters((current) => ({
                         ...current,
-                        startDateFrom: event.target.value,
+                        startDateFrom,
                       }))
                     }
                   />
                 </Field>
                 <Field label="Debut max">
-                  <Input
+                  <FrenchDateInput
                     className="w-40 max-w-full"
-                    type="date"
                     value={prescriptionFilters.startDateTo}
-                    onChange={(event) =>
+                    onValueChange={(startDateTo) =>
                       setPrescriptionFilters((current) => ({
                         ...current,
-                        startDateTo: event.target.value,
+                        startDateTo,
                       }))
                     }
                   />
@@ -2886,14 +2889,13 @@ function PatientWorkspace({
                     </Field>
                   </div>
                   <Field label="Date et heure">
-                    <Input
+                    <FrenchDateTimeInput
                       required
-                      type="datetime-local"
                       value={evolutionForm.recordedAt}
-                      onChange={(event) =>
+                      onValueChange={(recordedAt) =>
                         setEvolutionForm((current) => ({
                           ...current,
-                          recordedAt: event.target.value,
+                          recordedAt,
                         }))
                       }
                     />
@@ -2990,22 +2992,16 @@ function PrescriptionForm({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Debut">
-          <Input
+          <FrenchDateInput
             required
-            type="date"
             value={form.startDate}
-            onChange={(event) =>
-              onChange({ ...form, startDate: event.target.value })
-            }
+            onValueChange={(startDate) => onChange({ ...form, startDate })}
           />
         </Field>
         <Field label="Fin">
-          <Input
-            type="date"
+          <FrenchDateInput
             value={form.endDate}
-            onChange={(event) =>
-              onChange({ ...form, endDate: event.target.value })
-            }
+            onValueChange={(endDate) => onChange({ ...form, endDate })}
           />
         </Field>
         <Field label="Statut">
@@ -3138,13 +3134,10 @@ function LabPanelDialog({
 
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Date de prelevement">
-              <Input
+              <FrenchDateTimeInput
                 required
-                type="datetime-local"
                 value={form.sampledAt}
-                onChange={(event) =>
-                  onChange({ ...form, sampledAt: event.target.value })
-                }
+                onValueChange={(sampledAt) => onChange({ ...form, sampledAt })}
               />
             </Field>
             <Field label="Type de bilan">
@@ -4089,6 +4082,368 @@ function Field({
   )
 }
 
+function AddressAutocomplete({
+  id,
+  required,
+  value,
+  onChange,
+}: {
+  id: string
+  required?: boolean
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([])
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const [open, setOpen] = useState(false)
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle")
+  const inputFocusedRef = useRef(false)
+  const selectedValueRef = useRef("")
+  const suggestionListId = `${id}-suggestions`
+  const activeSuggestion = suggestions[activeIndex]
+
+  useEffect(() => {
+    const query = value.trim()
+
+    if (
+      query.length < ADDRESS_QUERY_MIN_LENGTH ||
+      query === selectedValueRef.current
+    ) {
+      setSuggestions([])
+      setOpen(false)
+      setStatus("idle")
+      setActiveIndex(-1)
+      return
+    }
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => {
+      setStatus("loading")
+
+      searchAddressSuggestions(query, controller.signal)
+        .then((results) => {
+          if (controller.signal.aborted) {
+            return
+          }
+
+          setSuggestions(results)
+          setActiveIndex(-1)
+          setStatus("idle")
+          setOpen(inputFocusedRef.current && results.length > 0)
+        })
+        .catch((error) => {
+          if (isAbortError(error)) {
+            return
+          }
+
+          setSuggestions([])
+          setActiveIndex(-1)
+          setStatus("error")
+          setOpen(inputFocusedRef.current)
+        })
+    }, 250)
+
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    selectedValueRef.current = ""
+    onChange(event.target.value)
+  }
+
+  function selectSuggestion(suggestion: AddressSuggestion) {
+    selectedValueRef.current = suggestion.label
+    onChange(suggestion.label)
+    setSuggestions([])
+    setOpen(false)
+    setActiveIndex(-1)
+    setStatus("idle")
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!open) {
+      return
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault()
+      setOpen(false)
+      setActiveIndex(-1)
+      return
+    }
+
+    if (suggestions.length === 0) {
+      return
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault()
+      setActiveIndex((current) => (current + 1) % suggestions.length)
+      return
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault()
+      setActiveIndex(
+        (current) => (current <= 0 ? suggestions.length : current) - 1
+      )
+      return
+    }
+
+    if (event.key === "Enter" && activeSuggestion) {
+      event.preventDefault()
+      selectSuggestion(activeSuggestion)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <Textarea
+        id={id}
+        required={required}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-controls={suggestionListId}
+        aria-expanded={open}
+        aria-activedescendant={
+          activeSuggestion ? `${suggestionListId}-${activeIndex}` : undefined
+        }
+        className="min-h-20"
+        value={value}
+        onBlur={() => {
+          inputFocusedRef.current = false
+          setOpen(false)
+          setActiveIndex(-1)
+        }}
+        onChange={handleChange}
+        onFocus={() => {
+          inputFocusedRef.current = true
+          setOpen(suggestions.length > 0 || status === "error")
+        }}
+        onKeyDown={handleKeyDown}
+      />
+
+      {open && (
+        <div
+          id={suggestionListId}
+          role="listbox"
+          className="absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          {suggestions.map((suggestion, index) => (
+            <button
+              id={`${suggestionListId}-${index}`}
+              key={`${suggestion.id}-${suggestion.label}`}
+              type="button"
+              role="option"
+              aria-selected={index === activeIndex}
+              className={cn(
+                "grid w-full gap-0.5 rounded-sm px-2.5 py-2 text-left text-sm outline-none transition-colors",
+                index === activeIndex
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent hover:text-accent-foreground"
+              )}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                selectSuggestion(suggestion)
+              }}
+            >
+              <span className="truncate font-medium">{suggestion.label}</span>
+              {(suggestion.city || suggestion.context) && (
+                <span className="truncate text-xs text-muted-foreground">
+                  {[suggestion.city, suggestion.context]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+            </button>
+          ))}
+
+          {status === "loading" && suggestions.length === 0 && (
+            <div className="px-2.5 py-2 text-sm text-muted-foreground">
+              Recherche...
+            </div>
+          )}
+
+          {status === "error" && suggestions.length === 0 && (
+            <div className="px-2.5 py-2 text-sm text-destructive">
+              Suggestions indisponibles
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
+}
+
+type FrenchDateInputProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "type" | "value" | "onChange"
+> & {
+  value: string
+  onValueChange: (value: string) => void
+}
+
+const FRENCH_DATE_INPUT_PATTERN = "\\d{1,2}/\\d{1,2}/\\d{4}"
+const FRENCH_DATE_TIME_INPUT_PATTERN =
+  "\\d{1,2}/\\d{1,2}/\\d{4} [0-2]?\\d[:h]\\d{1,2}"
+const FRENCH_DATE_INPUT_TITLE = "Format attendu : jj/mm/aaaa"
+const FRENCH_DATE_TIME_INPUT_TITLE = "Format attendu : jj/mm/aaaa hh:mm"
+
+function FrenchDateInput({
+  value,
+  onValueChange,
+  onBlur,
+  placeholder = "jj/mm/aaaa",
+  inputMode = "numeric",
+  ...props
+}: FrenchDateInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState(() => ({
+    value,
+    displayValue: formatFrenchDateInputValue(value),
+  }))
+  const displayValue =
+    draft.value === value ? draft.displayValue : formatFrenchDateInputValue(value)
+
+  useEffect(() => {
+    inputRef.current?.setCustomValidity("")
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextValue = event.target.value
+    const parsedValue = parseFrenchDateInputValue(nextValue)
+
+    setDraft({
+      value: parsedValue ?? (nextValue.trim() === "" ? "" : value),
+      displayValue: nextValue,
+    })
+    event.target.setCustomValidity(
+      nextValue.trim() && parsedValue === null ? FRENCH_DATE_INPUT_TITLE : ""
+    )
+
+    if (parsedValue !== null || nextValue.trim() === "") {
+      onValueChange(parsedValue ?? "")
+    }
+  }
+
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    const parsedValue = parseFrenchDateInputValue(event.target.value)
+
+    if (parsedValue !== null) {
+      setDraft({
+        value: parsedValue,
+        displayValue: formatFrenchDateInputValue(parsedValue),
+      })
+      event.target.setCustomValidity("")
+    } else if (event.target.value.trim() === "") {
+      setDraft({ value: "", displayValue: "" })
+      event.target.setCustomValidity("")
+    } else {
+      event.target.setCustomValidity(FRENCH_DATE_INPUT_TITLE)
+    }
+
+    onBlur?.(event)
+  }
+
+  return (
+    <Input
+      {...props}
+      ref={inputRef}
+      type="text"
+      inputMode={inputMode}
+      pattern={FRENCH_DATE_INPUT_PATTERN}
+      placeholder={placeholder}
+      title={FRENCH_DATE_INPUT_TITLE}
+      value={displayValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+    />
+  )
+}
+
+function FrenchDateTimeInput({
+  value,
+  onValueChange,
+  onBlur,
+  placeholder = "jj/mm/aaaa hh:mm",
+  inputMode = "numeric",
+  ...props
+}: FrenchDateInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState(() => ({
+    value,
+    displayValue: formatFrenchDateTimeInputValue(value),
+  }))
+  const displayValue =
+    draft.value === value
+      ? draft.displayValue
+      : formatFrenchDateTimeInputValue(value)
+
+  useEffect(() => {
+    inputRef.current?.setCustomValidity("")
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextValue = event.target.value
+    const parsedValue = parseFrenchDateTimeInputValue(nextValue)
+
+    setDraft({
+      value: parsedValue ?? (nextValue.trim() === "" ? "" : value),
+      displayValue: nextValue,
+    })
+    event.target.setCustomValidity(
+      nextValue.trim() && parsedValue === null
+        ? FRENCH_DATE_TIME_INPUT_TITLE
+        : ""
+    )
+
+    if (parsedValue !== null || nextValue.trim() === "") {
+      onValueChange(parsedValue ?? "")
+    }
+  }
+
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    const parsedValue = parseFrenchDateTimeInputValue(event.target.value)
+
+    if (parsedValue !== null) {
+      setDraft({
+        value: parsedValue,
+        displayValue: formatFrenchDateTimeInputValue(parsedValue),
+      })
+      event.target.setCustomValidity("")
+    } else if (event.target.value.trim() === "") {
+      setDraft({ value: "", displayValue: "" })
+      event.target.setCustomValidity("")
+    } else {
+      event.target.setCustomValidity(FRENCH_DATE_TIME_INPUT_TITLE)
+    }
+
+    onBlur?.(event)
+  }
+
+  return (
+    <Input
+      {...props}
+      ref={inputRef}
+      type="text"
+      inputMode={inputMode}
+      pattern={FRENCH_DATE_TIME_INPUT_PATTERN}
+      placeholder={placeholder}
+      title={FRENCH_DATE_TIME_INPUT_TITLE}
+      value={displayValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+    />
+  )
+}
+
 function NumberField({
   label,
   value,
@@ -4124,20 +4479,15 @@ function SexSelect({
 }) {
   return (
     <Select
-      value={value || UNSELECTED_SEX_VALUE}
-      onValueChange={(nextValue) => {
-        onChange(nextValue === UNSELECTED_SEX_VALUE ? "" : nextValue)
-      }}
+      value={value}
+      onValueChange={onChange}
       required={required}
     >
       <SelectTrigger className="max-w-full">
         <Users className="size-4 text-muted-foreground" />
-        <SelectValue placeholder="Sexe" />
+        <SelectValue placeholder="Selectionner" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={UNSELECTED_SEX_VALUE} disabled={required}>
-          {required ? "Selectionner" : "Non renseigne"}
-        </SelectItem>
         {PATIENT_SEXES.map((sex) => (
           <SelectItem key={sex} value={sex}>
             {PATIENT_SEX_LABELS[sex]}
@@ -4869,19 +5219,179 @@ function formatChartTooltipValue(value: unknown, unit: string, decimals: number)
   return unit ? `${formattedValue} ${unit}` : formattedValue
 }
 
-function dateTimeLocalInput(value: string) {
-  if (!value) {
-    return nowLocalInput()
+const ISO_DATE_INPUT_VALUE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const ISO_DATE_TIME_INPUT_VALUE_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+const FRENCH_DATE_VALUE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+const FRENCH_DATE_TIME_VALUE_PATTERN =
+  /^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2})[:h](\d{1,2})$/
+
+function formatFrenchDateInputValue(value: string) {
+  const normalizedValue = normalizeDateInputValue(value)
+  const match = normalizedValue.match(ISO_DATE_INPUT_VALUE_PATTERN)
+
+  if (!match) {
+    return value
+  }
+
+  const [, year, month, day] = match
+  return `${day}/${month}/${year}`
+}
+
+function formatFrenchDateTimeInputValue(value: string) {
+  const normalizedValue = normalizeDateTimeInputValue(value)
+  const match = normalizedValue.match(ISO_DATE_TIME_INPUT_VALUE_PATTERN)
+
+  if (!match) {
+    return value
+  }
+
+  const [, year, month, day, hour, minute] = match
+  return `${day}/${month}/${year} ${hour}:${minute}`
+}
+
+function parseFrenchDateInputValue(value: string) {
+  const match = value.trim().match(FRENCH_DATE_VALUE_PATTERN)
+
+  if (!match) {
+    return null
+  }
+
+  const [, dayValue, monthValue, yearValue] = match
+  const day = Number(dayValue)
+  const month = Number(monthValue)
+  const year = Number(yearValue)
+
+  if (!isValidDateParts(year, month, day)) {
+    return null
+  }
+
+  return `${padDatePart(year, 4)}-${padDatePart(month)}-${padDatePart(day)}`
+}
+
+function parseFrenchDateTimeInputValue(value: string) {
+  const match = value.trim().match(FRENCH_DATE_TIME_VALUE_PATTERN)
+
+  if (!match) {
+    return null
+  }
+
+  const [, dayValue, monthValue, yearValue, hourValue, minuteValue] = match
+  const day = Number(dayValue)
+  const month = Number(monthValue)
+  const year = Number(yearValue)
+  const hour = Number(hourValue)
+  const minute = Number(minuteValue)
+
+  if (
+    !isValidDateParts(year, month, day) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null
+  }
+
+  return `${padDatePart(year, 4)}-${padDatePart(month)}-${padDatePart(
+    day
+  )}T${padDatePart(hour)}:${padDatePart(minute)}`
+}
+
+function normalizeDateInputValue(value: string) {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return ""
+  }
+
+  const isoMatch = trimmedValue.match(ISO_DATE_INPUT_VALUE_PATTERN)
+
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    return isValidDateParts(Number(year), Number(month), Number(day))
+      ? trimmedValue
+      : value
   }
 
   const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
-    return value.slice(0, 16)
+    return value
+  }
+
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 10)
+}
+
+function normalizeDateTimeInputValue(value: string) {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return ""
+  }
+
+  const isoMatch = trimmedValue.match(ISO_DATE_TIME_INPUT_VALUE_PATTERN)
+
+  if (isoMatch) {
+    const [, year, month, day, hour, minute] = isoMatch
+    return isValidDateParts(Number(year), Number(month), Number(day)) &&
+      Number(hour) >= 0 &&
+      Number(hour) <= 23 &&
+      Number(minute) >= 0 &&
+      Number(minute) <= 59
+      ? `${year}-${month}-${day}T${hour}:${minute}`
+      : value
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
   }
 
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   return date.toISOString().slice(0, 16)
+}
+
+function isValidDateParts(year: number, month: number, day: number) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    year < 1 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return false
+  }
+
+  const date = new Date(0)
+  date.setFullYear(year, month - 1, day)
+  date.setHours(0, 0, 0, 0)
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  )
+}
+
+function padDatePart(value: number, length = 2) {
+  return value.toString().padStart(length, "0")
+}
+
+function dateTimeLocalInput(value: string) {
+  if (!value) {
+    return nowLocalInput()
+  }
+
+  const normalizedValue = normalizeDateTimeInputValue(value)
+  return normalizedValue.match(ISO_DATE_TIME_INPUT_VALUE_PATTERN)
+    ? normalizedValue
+    : value.slice(0, 16)
 }
 
 function dateInput(value: string) {
@@ -4889,14 +5399,10 @@ function dateInput(value: string) {
     return todayInput()
   }
 
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value.slice(0, 10)
-  }
-
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  return date.toISOString().slice(0, 10)
+  const normalizedValue = normalizeDateInputValue(value)
+  return normalizedValue.match(ISO_DATE_INPUT_VALUE_PATTERN)
+    ? normalizedValue
+    : value.slice(0, 10)
 }
 
 function nowLocalInput() {

@@ -18,7 +18,7 @@ use crate::{
     validation::{require_non_empty, require_one_of},
 };
 
-const PATIENT_SEXES: &[&str] = &["female", "male", "other", "unknown"];
+const PATIENT_SEXES: &[&str] = &["female", "male"];
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]

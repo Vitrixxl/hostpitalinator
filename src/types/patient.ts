@@ -1,4 +1,4 @@
-export type PatientSex = "female" | "male" | "other" | "unknown"
+export type PatientSex = "female" | "male"
 
 export type Patient = {
   id: string

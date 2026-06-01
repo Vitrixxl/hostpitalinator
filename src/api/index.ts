@@ -42,6 +42,10 @@ export {
 } from "@/api/evolutions.api"
 export { healthCheck } from "@/api/health.api"
 export {
+  searchAddressSuggestions,
+  type AddressSuggestion,
+} from "@/api/geocoding.api"
+export {
   addLabResult,
   listLabResults,
   type AddLabResultInput,
