@@ -35,6 +35,8 @@ pub struct Patient {
     pub administrative_info: Option<String>,
     pub current_service: String,
     pub bed_id: Option<String>,
+    pub weight: Option<f64>,
+    pub height: Option<f64>,
     pub created_at: String,
     pub updated_at: String,
     pub archived_at: Option<String>,
@@ -54,6 +56,8 @@ pub struct CreatePatientRequest {
     administrative_info: Option<String>,
     current_service: Option<String>,
     bed_id: Option<String>,
+    weight: Option<f64>,
+    height: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +81,10 @@ pub struct UpdatePatientRequest {
     current_service: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     bed_id: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_f64_field")]
+    weight: NullableF64Field,
+    #[serde(default, deserialize_with = "deserialize_nullable_f64_field")]
+    height: NullableF64Field,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,6 +99,13 @@ enum NullableStringField {
     #[default]
     Missing,
     Present(Option<String>),
+}
+
+#[derive(Debug, Default)]
+enum NullableF64Field {
+    #[default]
+    Missing,
+    Present(Option<f64>),
 }
 
 pub fn routes() -> Router<AppState> {
@@ -247,9 +262,9 @@ async fn create_patient(
         INSERT INTO patients (
           id, first_name, last_name, birth_date, sex, address, apartment_number,
           phone_number, email,
-          administrative_info, current_service, bed_id
+          administrative_info, current_service, bed_id, weight, height
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
@@ -265,6 +280,8 @@ async fn create_patient(
     .bind(payload.administrative_info.map(trim_optional))
     .bind(current_service)
     .bind(bed_id)
+    .bind(payload.weight)
+    .bind(payload.height)
     .fetch_one(&state.pool)
     .await?;
 
@@ -305,6 +322,8 @@ async fn update_patient(
     let email = merge_nullable_string_field(payload.email, current.email);
     let administrative_info =
         merge_nullable_string_field(payload.administrative_info, current.administrative_info);
+    let weight = merge_nullable_f64_field(payload.weight, current.weight);
+    let height = merge_nullable_f64_field(payload.height, current.height);
     let bed_id = match requested_bed {
         NullableStringField::Present(Some(value)) => normalize_optional(value),
         NullableStringField::Present(None) => None,
@@ -341,6 +360,8 @@ async fn update_patient(
             administrative_info = ?,
             current_service = ?,
             bed_id = ?,
+            weight = ?,
+            height = ?,
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ?
         RETURNING *
@@ -357,6 +378,8 @@ async fn update_patient(
     .bind(administrative_info.map(trim_optional))
     .bind(current_service)
     .bind(bed_id)
+    .bind(weight)
+    .bind(height)
     .bind(id)
     .fetch_one(&state.pool)
     .await?;
@@ -503,6 +526,12 @@ impl CreatePatientRequest {
         if let Some(sex) = &self.sex {
             validate_patient_sex(sex)?;
         }
+        if let Some(weight) = self.weight {
+            crate::validation::require_positive_f64(weight, "weight")?;
+        }
+        if let Some(height) = self.height {
+            crate::validation::require_positive_f64(height, "height")?;
+        }
         Ok(())
     }
 }
@@ -524,6 +553,12 @@ impl UpdatePatientRequest {
         if let Some(current_service) = &self.current_service {
             require_non_empty(current_service, "currentService")?;
         }
+        if let NullableF64Field::Present(Some(weight)) = &self.weight {
+            crate::validation::require_positive_f64(*weight, "weight")?;
+        }
+        if let NullableF64Field::Present(Some(height)) = &self.height {
+            crate::validation::require_positive_f64(*height, "height")?;
+        }
         Ok(())
     }
 }
@@ -540,6 +575,13 @@ fn merge_nullable_string_field(
         NullableStringField::Missing => current_value,
         NullableStringField::Present(Some(value)) => normalize_optional(value),
         NullableStringField::Present(None) => None,
+    }
+}
+
+fn merge_nullable_f64_field(field: NullableF64Field, current_value: Option<f64>) -> Option<f64> {
+    match field {
+        NullableF64Field::Missing => current_value,
+        NullableF64Field::Present(value) => value,
     }
 }
 
@@ -560,6 +602,13 @@ where
     D: Deserializer<'de>,
 {
     Option::<String>::deserialize(deserializer).map(NullableStringField::Present)
+}
+
+fn deserialize_nullable_f64_field<'de, D>(deserializer: D) -> Result<NullableF64Field, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<f64>::deserialize(deserializer).map(NullableF64Field::Present)
 }
 
 fn normalize_optional(value: String) -> Option<String> {

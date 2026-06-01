@@ -13,6 +13,8 @@ export type Patient = {
   administrativeInfo?: string | null
   currentService: string
   bedId?: string | null
+  weight?: number | null
+  height?: number | null
   createdAt: string
   updatedAt: string
   archivedAt?: string | null

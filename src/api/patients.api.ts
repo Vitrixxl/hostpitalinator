@@ -16,6 +16,8 @@ export type CreatePatientInput = Pick<
       | "administrativeInfo"
       | "currentService"
       | "bedId"
+      | "weight"
+      | "height"
     >
   >
 

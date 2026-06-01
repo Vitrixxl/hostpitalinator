@@ -9,7 +9,10 @@ use uuid::Uuid;
 
 use crate::{
     error::ApiResult,
-    modules::{auth::CurrentAccount, patients::require_patient_scope},
+    modules::{
+        auth::CurrentAccount,
+        patients::{require_patient_scope, Patient},
+    },
     realtime::publish_change,
     state::AppState,
     validation::{require_non_empty, require_positive_f64, require_positive_i64},
@@ -27,6 +30,7 @@ pub struct VitalRecord {
     diastolic_blood_pressure: i64,
     oxygen_saturation: f64,
     weight: f64,
+    height: Option<f64>,
     diuresis: Option<f64>,
     last_stool_date: String,
     created_at: String,
@@ -42,6 +46,7 @@ pub struct AddVitalRecordRequest {
     diastolic_blood_pressure: i64,
     oxygen_saturation: f64,
     weight: f64,
+    height: Option<f64>,
     diuresis: Option<f64>,
     last_stool_date: String,
 }
@@ -117,10 +122,11 @@ async fn add_vital_record(
           diastolic_blood_pressure,
           oxygen_saturation,
           weight,
+          height,
           diuresis,
           last_stool_date
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
@@ -133,20 +139,24 @@ async fn add_vital_record(
     .bind(payload.diastolic_blood_pressure)
     .bind(payload.oxygen_saturation)
     .bind(payload.weight)
+    .bind(payload.height)
     .bind(payload.diuresis)
     .bind(payload.last_stool_date.trim())
     .fetch_one(&state.pool)
     .await?;
+
+    let synced_patient = sync_patient_measurements_from_latest_vital(&state, &patient_id).await?;
 
     publish_change(
         &state,
         "vitalRecord",
         "created",
         record.id.clone(),
-        Some(patient_id),
+        Some(patient_id.clone()),
         ["patient", "vitals"],
         &record,
     );
+    publish_synced_patient(&state, synced_patient);
 
     Ok(Json(record))
 }
@@ -171,6 +181,7 @@ async fn update_vital_record(
           diastolic_blood_pressure = ?,
           oxygen_saturation = ?,
           weight = ?,
+          height = ?,
           diuresis = ?,
           last_stool_date = ?
         WHERE id = ? AND patient_id = ?
@@ -184,6 +195,7 @@ async fn update_vital_record(
     .bind(payload.diastolic_blood_pressure)
     .bind(payload.oxygen_saturation)
     .bind(payload.weight)
+    .bind(payload.height)
     .bind(payload.diuresis)
     .bind(payload.last_stool_date.trim())
     .bind(id)
@@ -191,15 +203,18 @@ async fn update_vital_record(
     .fetch_one(&state.pool)
     .await?;
 
+    let synced_patient = sync_patient_measurements_from_latest_vital(&state, &patient_id).await?;
+
     publish_change(
         &state,
         "vitalRecord",
         "updated",
         record.id.clone(),
-        Some(patient_id),
+        Some(patient_id.clone()),
         ["patient", "vitals"],
         &record,
     );
+    publish_synced_patient(&state, synced_patient);
 
     Ok(Json(record))
 }
@@ -223,6 +238,8 @@ async fn delete_vital_record(
     .fetch_one(&state.pool)
     .await?;
 
+    let synced_patient = sync_patient_measurements_from_latest_vital(&state, &patient_id).await?;
+
     publish_change(
         &state,
         "vitalRecord",
@@ -232,8 +249,65 @@ async fn delete_vital_record(
         ["patient", "vitals"],
         &record,
     );
+    publish_synced_patient(&state, synced_patient);
 
     Ok(Json(record))
+}
+
+async fn sync_patient_measurements_from_latest_vital(
+    state: &AppState,
+    patient_id: &str,
+) -> ApiResult<Option<Patient>> {
+    let latest_measurement = sqlx::query_as::<_, (f64, Option<f64>)>(
+        r#"
+        SELECT weight, height
+        FROM vital_records
+        WHERE patient_id = ?
+        ORDER BY recorded_at DESC, created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(patient_id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some((weight, height)) = latest_measurement else {
+        return Ok(None);
+    };
+
+    let patient = sqlx::query_as::<_, Patient>(
+        r#"
+        UPDATE patients
+        SET weight = ?,
+            height = COALESCE(?, height),
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE id = ?
+        RETURNING *
+        "#,
+    )
+    .bind(weight)
+    .bind(height)
+    .bind(patient_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Some(patient))
+}
+
+fn publish_synced_patient(state: &AppState, patient: Option<Patient>) {
+    let Some(patient) = patient else {
+        return;
+    };
+
+    publish_change(
+        state,
+        "patient",
+        "updated",
+        patient.id.clone(),
+        Some(patient.id.clone()),
+        ["patients", "patient"],
+        &patient,
+    );
 }
 
 impl AddVitalRecordRequest {
@@ -245,6 +319,9 @@ impl AddVitalRecordRequest {
         require_positive_i64(self.diastolic_blood_pressure, "diastolicBloodPressure")?;
         require_positive_f64(self.oxygen_saturation, "oxygenSaturation")?;
         require_positive_f64(self.weight, "weight")?;
+        if let Some(height) = self.height {
+            require_positive_f64(height, "height")?;
+        }
         require_non_empty(&self.last_stool_date, "lastStoolDate")?;
 
         if let Some(diuresis) = self.diuresis {

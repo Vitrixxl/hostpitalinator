@@ -8,6 +8,7 @@ export type VitalRecord = {
   diastolicBloodPressure: number
   oxygenSaturation: number
   weight: number
+  height?: number | null
   diuresis?: number | null
   lastStoolDate: string
   createdAt: string

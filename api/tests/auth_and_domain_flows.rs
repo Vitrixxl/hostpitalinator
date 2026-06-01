@@ -144,7 +144,9 @@ async fn create_patient(app: &Router, token: &str) -> Value {
             "phoneNumber": "01 23 45 67 89",
             "email": "ada.lovelace@example.test",
             "administrativeInfo": "Dossier initial",
-            "currentService": "Cardiologie"
+            "currentService": "Cardiologie",
+            "weight": 72.0,
+            "height": 181.0
         })),
     )
     .await;
@@ -487,6 +489,8 @@ async fn patients_can_be_created_and_listed() {
     assert_eq!(patient["apartmentNumber"], "B12");
     assert_eq!(patient["phoneNumber"], "01 23 45 67 89");
     assert_eq!(patient["email"], "ada.lovelace@example.test");
+    assert_eq!(patient["weight"], json!(72.0));
+    assert_eq!(patient["height"], json!(181.0));
 
     let (list_status, list) = request_json(
         &context.app,
@@ -605,6 +609,7 @@ async fn vital_records_can_be_added_listed_and_return_latest() {
             "diastolicBloodPressure": 78,
             "oxygenSaturation": 98.0,
             "weight": 72.4,
+            "height": 181.0,
             "diuresis": 900.0,
             "lastStoolDate": "2026-05-31"
         })),
@@ -629,6 +634,7 @@ async fn vital_records_can_be_added_listed_and_return_latest() {
             "diastolicBloodPressure": 81,
             "oxygenSaturation": 97.0,
             "weight": 72.2,
+            "height": 181.5,
             "diuresis": 850.0,
             "lastStoolDate": "2026-06-01"
         })),
@@ -638,6 +644,19 @@ async fn vital_records_can_be_added_listed_and_return_latest() {
     assert_eq!(updated["id"], vital["id"]);
     assert_eq!(updated["temperature"], json!(37.8));
     assert_eq!(updated["heartRate"], json!(80));
+    assert_eq!(updated["height"], json!(181.5));
+
+    let (patient_status, patient_after_vitals) = request_json(
+        &context.app,
+        Method::GET,
+        format!("/patients/{patient_id}"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(patient_status, StatusCode::OK, "{patient_after_vitals}");
+    assert_eq!(patient_after_vitals["weight"], json!(72.2));
+    assert_eq!(patient_after_vitals["height"], json!(181.5));
 
     let (list_status, list) = request_json(
         &context.app,
