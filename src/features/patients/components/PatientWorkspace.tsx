@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent, ReactNode } from "react"
 import {
   Activity,
   Archive,
+  ArrowLeft,
   ClipboardList,
   Download,
   ExternalLink,
@@ -111,7 +112,6 @@ import type {
 import {
   ClinicalValue,
   MedicalColumnHead,
-  MetricTile,
   PatientInfoBadge,
 } from "@/components/common/Display"
 import { AlertMessage, EmptyState, StatusBadge } from "@/components/common/Feedback"
@@ -120,7 +120,6 @@ import { DateTextInput, DateTimeTextInput } from "@/components/common/DateInputs
 import { NumberField, ServiceSelect } from "@/components/common/FormControls"
 import { LoadingScreen } from "@/components/common/LoadingScreen"
 import { SectionTitle } from "@/components/common/SectionTitle"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -1012,38 +1011,47 @@ export function PatientWorkspace({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 rounded-lg border bg-muted/20 p-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="rounded-lg border bg-muted/20 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
             <h2 className="font-heading text-2xl font-medium">
               {patient.lastName} {patient.firstName}
             </h2>
-            {patient.archivedAt ? (
-              <Badge variant="outline">Archive</Badge>
-            ) : (
-              <Badge variant="secondary">Actif</Badge>
-            )}
+            <div className="mt-3 flex max-w-5xl flex-wrap gap-2">
+              {patient.archivedAt ? (
+                <PatientInfoBadge>Archive</PatientInfoBadge>
+              ) : (
+                <PatientInfoBadge>Actif</PatientInfoBadge>
+              )}
+              <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
+              {patient.phoneNumber && (
+                <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
+              )}
+              {patient.email && (
+                <PatientInfoBadge>{patient.email}</PatientInfoBadge>
+              )}
+              <PatientInfoBadge>{`Sexe ${patientSexLabel(patient.sex)}`}</PatientInfoBadge>
+              <PatientInfoBadge>{`Lit ${bedLabel(beds, patient.bedId)}`}</PatientInfoBadge>
+              <PatientInfoBadge>
+                {`Constantes ${
+                  latestVital
+                    ? formatShortDateTime(latestVital.recordedAt)
+                    : "Aucune"
+                }`}
+              </PatientInfoBadge>
+              <PatientInfoBadge>{`Prescriptions ${prescriptions.length}`}</PatientInfoBadge>
+              <PatientInfoBadge>{`Documents ${documents.length}`}</PatientInfoBadge>
+            </div>
           </div>
-          <div className="mt-3 flex max-w-3xl flex-wrap gap-2">
-            <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
-            {patient.phoneNumber && (
-              <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
-            )}
-            {patient.email && <PatientInfoBadge>{patient.email}</PatientInfoBadge>}
-          </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-5">
-          <MetricTile label="Sexe" value={patientSexLabel(patient.sex)} />
-          <MetricTile label="Lit" value={bedLabel(beds, patient.bedId)} />
-          <MetricTile
-            label="Constantes"
-            value={latestVital ? formatShortDateTime(latestVital.recordedAt) : "Aucune"}
-          />
-          <MetricTile
-            label="Prescriptions"
-            value={`${prescriptions.length}`}
-          />
-          <MetricTile label="Documents" value={`${documents.length}`} />
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            onClick={() => navigate("/patients")}
+          >
+            <ArrowLeft className="size-4" />
+            Retour
+          </Button>
         </div>
       </div>
 
