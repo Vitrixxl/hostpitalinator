@@ -1197,8 +1197,8 @@ export function PatientWorkspace({
         )}
       </AnimatePresence>
 
-      <div className="rounded-3xl border bg-muted/20 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="rounded-3xl border bg-muted/20 p-4 flex flex-col gap-2">
+        <div className="flex gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex gap-2 sm:flex-row sm:items-center">
               <Button
@@ -1213,36 +1213,6 @@ export function PatientWorkspace({
               <h2 className="font-heading text-2xl font-medium">
                 {patient.lastName} {patient.firstName}
               </h2>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {patient.archivedAt ? (
-                <PatientInfoBadge>Archive</PatientInfoBadge>
-              ) : (
-                <PatientInfoBadge>Actif</PatientInfoBadge>
-              )}
-              <PatientInfoBadge>
-                {hasActiveVisit
-                  ? `Visite ${patient.currentVisitId}`
-                  : "Aucune visite en cours"}
-              </PatientInfoBadge>
-              <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
-              {patient.phoneNumber && (
-                <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
-              )}
-              {patient.email && (
-                <PatientInfoBadge>{patient.email}</PatientInfoBadge>
-              )}
-              <PatientInfoBadge>{`Sexe ${patientSexLabel(patient.sex)}`}</PatientInfoBadge>
-              <PatientInfoBadge>{`Lit ${bedLabel(beds, patient.bedId)}`}</PatientInfoBadge>
-              <PatientInfoBadge>
-                {`Constantes ${
-                  latestVital
-                    ? formatShortDateTime(latestVital.recordedAt)
-                    : "Aucune"
-                }`}
-              </PatientInfoBadge>
-              <PatientInfoBadge>{`Prescriptions ${prescriptions.length}`}</PatientInfoBadge>
-              <PatientInfoBadge>{`Documents ${documents.length}`}</PatientInfoBadge>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1284,6 +1254,36 @@ export function PatientWorkspace({
               Fin de visite
             </Button>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {patient.archivedAt ? (
+            <PatientInfoBadge>Archive</PatientInfoBadge>
+          ) : (
+            <PatientInfoBadge>Actif</PatientInfoBadge>
+          )}
+          <PatientInfoBadge>
+            {hasActiveVisit
+              ? `Visite ${patient.currentVisitId}`
+              : "Aucune visite en cours"}
+          </PatientInfoBadge>
+          <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
+          {patient.phoneNumber && (
+            <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
+          )}
+          {patient.email && (
+            <PatientInfoBadge>{patient.email}</PatientInfoBadge>
+          )}
+          <PatientInfoBadge>{`Sexe ${patientSexLabel(patient.sex)}`}</PatientInfoBadge>
+          <PatientInfoBadge>{`Lit ${bedLabel(beds, patient.bedId)}`}</PatientInfoBadge>
+          <PatientInfoBadge>
+            {`Constantes ${
+              latestVital
+                ? formatShortDateTime(latestVital.recordedAt)
+                : "Aucune"
+            }`}
+          </PatientInfoBadge>
+          <PatientInfoBadge>{`Prescriptions ${prescriptions.length}`}</PatientInfoBadge>
+          <PatientInfoBadge>{`Documents ${documents.length}`}</PatientInfoBadge>
         </div>
       </div>
 
@@ -1410,7 +1410,6 @@ export function PatientWorkspace({
               variant="outline"
               onClick={() => setEndVisitDialogOpen(false)}
             >
-              <XCircle className="size-4" />
               Annuler
             </Button>
             <Button
@@ -1418,7 +1417,6 @@ export function PatientWorkspace({
               variant="destructive"
               onClick={() => void handleEndVisit()}
             >
-              <Home className="size-4" />
               Confirmer la fin de visite
             </Button>
           </DialogFooter>
@@ -1440,12 +1438,10 @@ export function PatientWorkspace({
               variant="outline"
               onClick={() => setNewVisitDialogOpen(false)}
             >
-              <XCircle className="size-4" />
               Annuler
             </Button>
             <Button type="button" onClick={() => void handleStartNewVisit()}>
-              <Plus className="size-4" />
-              Creer la visite
+              Nouvelle visite
             </Button>
           </DialogFooter>
         </DialogContent>
