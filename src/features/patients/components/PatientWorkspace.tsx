@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { ChangeEvent, FormEvent } from "react"
+import type { ChangeEvent, FormEvent, ReactNode } from "react"
 import {
   Activity,
   Archive,
@@ -17,6 +17,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react"
+import { AnimatePresence, motion } from "motion/react"
 import { Navigate, useNavigate, useParams } from "react-router"
 
 import {
@@ -150,7 +151,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Tooltip,
@@ -179,6 +180,23 @@ import type {
   Service,
   VitalRecord,
 } from "@/types"
+
+const PATIENT_TAB_TRANSITION = {
+  duration: 0.42,
+  ease: [0.22, 1, 0.36, 1],
+} as const
+
+const patientTabVariants = {
+  enter: (direction: "forward" | "backward") => ({
+    x: direction === "forward" ? "100%" : "-100%",
+  }),
+  center: {
+    x: 0,
+  },
+  exit: (direction: "forward" | "backward") => ({
+    x: direction === "forward" ? "-100%" : "100%",
+  }),
+}
 
 export function PatientWorkspace({
   patientId,
@@ -972,36 +990,8 @@ export function PatientWorkspace({
     const nextTabIndex = PATIENT_TAB_VALUES.indexOf(nextTab)
     const direction = nextTabIndex > activeTabIndex ? "forward" : "backward"
     setTabDirection(direction)
-    document.documentElement.dataset.patientTabDirection = direction
-
-    const navigateToTab = () => navigate(`/patients/${patientId}/${nextTab}`)
-    const startViewTransition =
-      "startViewTransition" in document
-        ? () =>
-            (
-              document as Document & {
-                startViewTransition: (callback: () => void) => void
-              }
-            ).startViewTransition(navigateToTab)
-        : null
-
-    if (startViewTransition) {
-      startViewTransition()
-    } else {
-      navigateToTab()
-    }
-
-    window.setTimeout(() => {
-      delete document.documentElement.dataset.patientTabDirection
-    }, 520)
+    navigate(`/patients/${patientId}/${nextTab}`)
   }
-
-  const tabPanelClassName = cn(
-    "patient-tab-panel",
-    tabDirection === "forward"
-      ? "patient-tab-panel-forward"
-      : "patient-tab-panel-backward"
-  )
 
   if (!tab || !activeTabFromRoute) {
     return <Navigate to={`/patients/${patientId}/summary`} replace />
@@ -1077,7 +1067,10 @@ export function PatientWorkspace({
           ))}
         </TabsList>
 
-        <TabsContent className={tabPanelClassName} value="summary">
+        <div className="grid overflow-x-hidden">
+          <AnimatePresence initial={false} custom={tabDirection} mode="sync">
+            {activeTab === "summary" && (
+              <PatientTabMotion key="summary" direction={tabDirection}>
           <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <form
               className="grid gap-4 rounded-lg border bg-background p-4"
@@ -1148,9 +1141,11 @@ export function PatientWorkspace({
               </Button>
             </section>
           </section>
-        </TabsContent>
+              </PatientTabMotion>
+            )}
 
-        <TabsContent className={tabPanelClassName} value="vitals">
+            {activeTab === "vitals" && (
+              <PatientTabMotion key="vitals" direction={tabDirection}>
           <section className="space-y-4">
             <SectionTitle
               icon={Thermometer}
@@ -1414,9 +1409,11 @@ export function PatientWorkspace({
               </DialogContent>
             </Dialog>
           </section>
-        </TabsContent>
+              </PatientTabMotion>
+            )}
 
-        <TabsContent className={tabPanelClassName} value="prescriptions">
+            {activeTab === "prescriptions" && (
+              <PatientTabMotion key="prescriptions" direction={tabDirection}>
           <section className="grid gap-4">
             <div className="space-y-4 rounded-lg border bg-background p-4">
               <SectionTitle
@@ -1549,9 +1546,11 @@ export function PatientWorkspace({
               </DialogContent>
             </Dialog>
           </section>
-        </TabsContent>
+              </PatientTabMotion>
+            )}
 
-        <TabsContent className={tabPanelClassName} value="labs">
+            {activeTab === "labs" && (
+              <PatientTabMotion key="labs" direction={tabDirection}>
           <section className="grid gap-4">
             <div className="space-y-4 rounded-lg border bg-background p-4">
               <SectionTitle
@@ -1745,9 +1744,11 @@ export function PatientWorkspace({
               }
             }}
           />
-        </TabsContent>
+              </PatientTabMotion>
+            )}
 
-        <TabsContent className={tabPanelClassName} value="documents">
+            {activeTab === "documents" && (
+              <PatientTabMotion key="documents" direction={tabDirection}>
           <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
             <div className="space-y-4 rounded-lg border bg-background p-4">
               <SectionTitle
@@ -1882,9 +1883,11 @@ export function PatientWorkspace({
               </Button>
             </form>
           </section>
-        </TabsContent>
+              </PatientTabMotion>
+            )}
 
-        <TabsContent className={tabPanelClassName} value="evolution">
+            {activeTab === "evolution" && (
+              <PatientTabMotion key="evolution" direction={tabDirection}>
           {evolutionDraftOpen ? (
             <form
               className="grid gap-4 rounded-lg border bg-background p-4"
@@ -2061,9 +2064,35 @@ export function PatientWorkspace({
               </Dialog>
             </section>
           )}
-        </TabsContent>
+              </PatientTabMotion>
+            )}
+          </AnimatePresence>
+        </div>
       </Tabs>
     </div>
+  )
+}
+
+function PatientTabMotion({
+  children,
+  direction,
+}: {
+  children: ReactNode
+  direction: "forward" | "backward"
+}) {
+  return (
+    <motion.div
+      className="col-start-1 row-start-1 min-w-0 text-sm outline-none"
+      custom={direction}
+      variants={patientTabVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      transition={PATIENT_TAB_TRANSITION}
+      style={{ willChange: "transform" }}
+    >
+      {children}
+    </motion.div>
   )
 }
 
