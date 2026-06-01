@@ -2406,6 +2406,92 @@ export function PatientWorkspace({
   )
 }
 
+function patientUpdateToastFromRealtimeEvent(
+  event: RealtimeEvent
+): PatientUpdateToast | null {
+  if (event.action !== "created") {
+    return null
+  }
+
+  const detail = patientUpdateToastDetail(event)
+
+  return detail ? { id: event.id, detail } : null
+}
+
+function patientUpdateToastDetail(event: RealtimeEvent) {
+  if (event.entity === "vitalRecord") {
+    const recordedAt = patientUpdatePayloadText(event, "recordedAt")
+    return recordedAt
+      ? `Constantes ajoutees: ${formatShortDateTime(recordedAt)}`
+      : "Constantes ajoutees"
+  }
+
+  if (event.entity === "prescription") {
+    const medication = patientUpdatePayloadText(event, "medication")
+    const dosage = patientUpdatePayloadText(event, "dosage")
+    return patientUpdateDetailWithValue(
+      "Prescription ajoutee",
+      [medication, dosage].filter(Boolean).join(" - ")
+    )
+  }
+
+  if (event.entity === "labPanel") {
+    return patientUpdateDetailWithValue(
+      "Bilan biologique ajoute",
+      patientUpdatePayloadText(event, "panelType")
+    )
+  }
+
+  if (event.entity === "medicalDocument") {
+    const title = patientUpdatePayloadText(event, "title")
+    const category = patientUpdateDocumentCategoryLabel(
+      patientUpdatePayloadText(event, "category")
+    )
+
+    return patientUpdateDetailWithValue(
+      "Document ajoute",
+      [title, category].filter(Boolean).join(" - ")
+    )
+  }
+
+  if (event.entity === "evolutionNote") {
+    return patientUpdateDetailWithValue(
+      "Note d'evolution ajoutee",
+      patientUpdatePayloadText(event, "author")
+    )
+  }
+
+  return null
+}
+
+function patientUpdateDetailWithValue(label: string, value: string | null) {
+  return value ? `${label}: ${value}` : label
+}
+
+function patientUpdatePayloadText(event: RealtimeEvent, key: string) {
+  if (!isRealtimePayloadRecord(event.payload)) {
+    return null
+  }
+
+  const value = event.payload[key]
+
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function patientUpdateDocumentCategoryLabel(category: string | null) {
+  if (!category) {
+    return null
+  }
+
+  return (
+    DOCUMENT_CATEGORY_LABELS[category as MedicalDocumentCategory] ?? category
+  )
+}
+
+function isRealtimePayloadRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 function PatientTabMotion({
   children,
   direction,
