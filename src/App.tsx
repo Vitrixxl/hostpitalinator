@@ -1,5 +1,6 @@
 import {
   type ChangeEvent,
+  type FocusEvent,
   type FormEvent,
   type KeyboardEvent,
   useCallback,
@@ -15,6 +16,7 @@ import {
   Ban,
   BedIcon,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ClipboardList,
   Trash2,
@@ -39,6 +41,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react"
+import { fr } from "date-fns/locale/fr"
 import {
   CartesianGrid,
   LabelList,
@@ -107,6 +110,7 @@ import {
 } from "@/api/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import {
   Card,
   CardContent,
@@ -1034,11 +1038,10 @@ function PatientFormFields({
           />
         </Field>
         <Field label="Date de naissance">
-          <Input
+          <DateTextInput
             required
-            type="date"
             value={form.birthDate}
-            onChange={(event) => updateField("birthDate", event.target.value)}
+            onValueChange={(birthDate) => updateField("birthDate", birthDate)}
           />
         </Field>
         <Field label="Sexe">
@@ -1908,7 +1911,7 @@ function PatientWorkspace({
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 rounded-lg border bg-muted/20 p-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-heading text-2xl font-medium">
               {patient.lastName} {patient.firstName}
@@ -1919,13 +1922,12 @@ function PatientWorkspace({
               <Badge variant="secondary">Actif</Badge>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
-            <span>Ne(e) le {formatDate(patient.birthDate)}</span>
-            {patient.sex && <span>{patientSexLabel(patient.sex)}</span>}
-            {patient.currentService && <span>{patient.currentService}</span>}
-            {patient.bedId && <span>Lit {bedLabel(beds, patient.bedId)}</span>}
-            {patient.phoneNumber && <span>{patient.phoneNumber}</span>}
-            {patient.email && <span>{patient.email}</span>}
+          <div className="mt-3 flex max-w-3xl flex-wrap gap-2">
+            <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
+            {patient.phoneNumber && (
+              <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
+            )}
+            {patient.email && <PatientInfoBadge>{patient.email}</PatientInfoBadge>}
           </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
@@ -2185,14 +2187,13 @@ function PatientWorkspace({
                     </DialogDescription>
                   </DialogHeader>
                   <Field label="Date et heure">
-                    <Input
+                    <DateTimeTextInput
                       required
-                      type="datetime-local"
                       value={vitalForm.recordedAt}
-                      onChange={(event) =>
+                      onValueChange={(recordedAt) =>
                         setVitalForm((current) => ({
                           ...current,
-                          recordedAt: event.target.value,
+                          recordedAt,
                         }))
                       }
                     />
@@ -2268,14 +2269,13 @@ function PatientWorkspace({
                     }
                   />
                   <Field label="Dernieres selles">
-                    <Input
+                    <DateTextInput
                       required
-                      type="date"
                       value={vitalForm.lastStoolDate}
-                      onChange={(event) =>
+                      onValueChange={(lastStoolDate) =>
                         setVitalForm((current) => ({
                           ...current,
-                          lastStoolDate: event.target.value,
+                          lastStoolDate,
                         }))
                       }
                     />
@@ -2356,27 +2356,25 @@ function PatientWorkspace({
                   />
                 </Field>
                 <Field label="Debut min">
-                  <Input
+                  <DateTextInput
                     className="w-40 max-w-full"
-                    type="date"
                     value={prescriptionFilters.startDateFrom}
-                    onChange={(event) =>
+                    onValueChange={(startDateFrom) =>
                       setPrescriptionFilters((current) => ({
                         ...current,
-                        startDateFrom: event.target.value,
+                        startDateFrom,
                       }))
                     }
                   />
                 </Field>
                 <Field label="Debut max">
-                  <Input
+                  <DateTextInput
                     className="w-40 max-w-full"
-                    type="date"
                     value={prescriptionFilters.startDateTo}
-                    onChange={(event) =>
+                    onValueChange={(startDateTo) =>
                       setPrescriptionFilters((current) => ({
                         ...current,
-                        startDateTo: event.target.value,
+                        startDateTo,
                       }))
                     }
                   />
@@ -2913,14 +2911,13 @@ function PatientWorkspace({
                     </Field>
                   </div>
                   <Field label="Date et heure">
-                    <Input
+                    <DateTimeTextInput
                       required
-                      type="datetime-local"
                       value={evolutionForm.recordedAt}
-                      onChange={(event) =>
+                      onValueChange={(recordedAt) =>
                         setEvolutionForm((current) => ({
                           ...current,
-                          recordedAt: event.target.value,
+                          recordedAt,
                         }))
                       }
                     />
@@ -3017,22 +3014,16 @@ function PrescriptionForm({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Debut">
-          <Input
+          <DateTextInput
             required
-            type="date"
             value={form.startDate}
-            onChange={(event) =>
-              onChange({ ...form, startDate: event.target.value })
-            }
+            onValueChange={(startDate) => onChange({ ...form, startDate })}
           />
         </Field>
         <Field label="Fin">
-          <Input
-            type="date"
+          <DateTextInput
             value={form.endDate}
-            onChange={(event) =>
-              onChange({ ...form, endDate: event.target.value })
-            }
+            onValueChange={(endDate) => onChange({ ...form, endDate })}
           />
         </Field>
         <Field label="Statut">
@@ -3321,13 +3312,10 @@ function LabPanelDialog({
 
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Date de prelevement">
-              <Input
+              <DateTimeTextInput
                 required
-                type="datetime-local"
                 value={form.sampledAt}
-                onChange={(event) =>
-                  onChange({ ...form, sampledAt: event.target.value })
-                }
+                onValueChange={(sampledAt) => onChange({ ...form, sampledAt })}
               />
             </Field>
             <Field label="Type de bilan">
@@ -4272,6 +4260,238 @@ function Field({
   )
 }
 
+function DateTextInput({
+  className,
+  disabled,
+  required,
+  value,
+  onValueChange,
+}: {
+  className?: string
+  disabled?: boolean
+  required?: boolean
+  value: string
+  onValueChange: (value: string) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(() => ({
+    value,
+    displayValue: formatDateTextInputValue(value),
+  }))
+  const displayValue =
+    draft.value === value ? draft.displayValue : formatDateTextInputValue(value)
+  const selectedDate = dateFromIsoValue(value)
+
+  useEffect(() => {
+    inputRef.current?.setCustomValidity("")
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextValue = formatDateTextDraftValue(event.target.value)
+    const parsedValue = parseDateTextInputValue(nextValue)
+
+    setDraft({
+      value: parsedValue ?? (nextValue.trim() === "" ? "" : value),
+      displayValue: nextValue,
+    })
+    event.target.setCustomValidity(
+      nextValue.trim() && parsedValue === null ? DATE_TEXT_INPUT_TITLE : ""
+    )
+
+    if (parsedValue !== null || nextValue.trim() === "") {
+      onValueChange(parsedValue ?? "")
+    }
+  }
+
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    const parsedValue = parseDateTextInputValue(event.target.value)
+
+    if (parsedValue !== null) {
+      setDraft({
+        value: parsedValue,
+        displayValue: formatDateTextInputValue(parsedValue),
+      })
+      event.target.setCustomValidity("")
+    } else if (event.target.value.trim() === "") {
+      setDraft({ value: "", displayValue: "" })
+      event.target.setCustomValidity("")
+    } else {
+      event.target.setCustomValidity(DATE_TEXT_INPUT_TITLE)
+    }
+  }
+
+  function selectDate(date: Date | undefined) {
+    if (!date) {
+      return
+    }
+
+    const nextValue = isoDateFromDate(date)
+    setDraft({
+      value: nextValue,
+      displayValue: formatDateTextInputValue(nextValue),
+    })
+    onValueChange(nextValue)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className={cn("flex w-full min-w-0 gap-2", className)}>
+        <Input
+          ref={inputRef}
+          required={required}
+          disabled={disabled}
+          inputMode="numeric"
+          placeholder="jj-mm-aaaa"
+          title={DATE_TEXT_INPUT_TITLE}
+          value={displayValue}
+          onBlur={handleBlur}
+          onChange={handleChange}
+        />
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="size-9 shrink-0 px-0"
+            disabled={disabled}
+            aria-label="Ouvrir le calendrier"
+          >
+            <CalendarDays className="size-4" />
+          </Button>
+        </PopoverTrigger>
+      </div>
+      <PopoverContent align="start" className="w-auto p-0">
+        <Calendar
+          mode="single"
+          locale={fr}
+          weekStartsOn={1}
+          selected={selectedDate ?? undefined}
+          defaultMonth={selectedDate ?? undefined}
+          onSelect={selectDate}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function DateTimeTextInput({
+  className,
+  disabled,
+  required,
+  value,
+  onValueChange,
+}: {
+  className?: string
+  disabled?: boolean
+  required?: boolean
+  value: string
+  onValueChange: (value: string) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(() => ({
+    value,
+    displayValue: formatDateTimeTextInputValue(value),
+  }))
+  const displayValue =
+    draft.value === value
+      ? draft.displayValue
+      : formatDateTimeTextInputValue(value)
+  const selectedDate = dateFromIsoValue(value)
+
+  useEffect(() => {
+    inputRef.current?.setCustomValidity("")
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextValue = formatDateTimeTextDraftValue(event.target.value)
+    const parsedValue = parseDateTimeTextInputValue(nextValue)
+
+    setDraft({
+      value: parsedValue ?? (nextValue.trim() === "" ? "" : value),
+      displayValue: nextValue,
+    })
+    event.target.setCustomValidity(
+      nextValue.trim() && parsedValue === null ? DATE_TIME_TEXT_INPUT_TITLE : ""
+    )
+
+    if (parsedValue !== null || nextValue.trim() === "") {
+      onValueChange(parsedValue ?? "")
+    }
+  }
+
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    const parsedValue = parseDateTimeTextInputValue(event.target.value)
+
+    if (parsedValue !== null) {
+      setDraft({
+        value: parsedValue,
+        displayValue: formatDateTimeTextInputValue(parsedValue),
+      })
+      event.target.setCustomValidity("")
+    } else if (event.target.value.trim() === "") {
+      setDraft({ value: "", displayValue: "" })
+      event.target.setCustomValidity("")
+    } else {
+      event.target.setCustomValidity(DATE_TIME_TEXT_INPUT_TITLE)
+    }
+  }
+
+  function selectDate(date: Date | undefined) {
+    if (!date) {
+      return
+    }
+
+    const nextValue = `${isoDateFromDate(date)}T${timeFromIsoDateTime(value)}`
+    setDraft({
+      value: nextValue,
+      displayValue: formatDateTimeTextInputValue(nextValue),
+    })
+    onValueChange(nextValue)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className={cn("flex w-full min-w-0 gap-2", className)}>
+        <Input
+          ref={inputRef}
+          required={required}
+          disabled={disabled}
+          inputMode="numeric"
+          placeholder="jj-mm-aaaa HH:mm"
+          title={DATE_TIME_TEXT_INPUT_TITLE}
+          value={displayValue}
+          onBlur={handleBlur}
+          onChange={handleChange}
+        />
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="size-9 shrink-0 px-0"
+            disabled={disabled}
+            aria-label="Ouvrir le calendrier"
+          >
+            <CalendarDays className="size-4" />
+          </Button>
+        </PopoverTrigger>
+      </div>
+      <PopoverContent align="start" className="w-auto p-0">
+        <Calendar
+          mode="single"
+          locale={fr}
+          weekStartsOn={1}
+          selected={selectedDate ?? undefined}
+          defaultMonth={selectedDate ?? undefined}
+          onSelect={selectDate}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function AddressAutocomplete({
   id,
   required,
@@ -4745,6 +4965,17 @@ function MedicalColumnHead({
         <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
     </TableHead>
+  )
+}
+
+function PatientInfoBadge({ children }: { children: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className="h-auto max-w-full justify-start rounded-md bg-background px-2.5 py-1 text-left leading-5 whitespace-normal break-words text-muted-foreground"
+    >
+      {children}
+    </Badge>
   )
 }
 
@@ -5277,6 +5508,193 @@ function formatChartTooltipValue(value: unknown, unit: string, decimals: number)
   }
 
   return unit ? `${formattedValue} ${unit}` : formattedValue
+}
+
+const DATE_TEXT_INPUT_TITLE = "Format attendu : jj-mm-aaaa"
+const DATE_TIME_TEXT_INPUT_TITLE = "Format attendu : jj-mm-aaaa HH:mm"
+const ISO_DATE_VALUE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})/
+const ISO_DATE_TIME_VALUE_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+const DATE_TEXT_VALUE_PATTERN = /^(\d{1,2})-(\d{1,2})-(\d{4})$/
+const DATE_TIME_TEXT_VALUE_PATTERN =
+  /^(\d{1,2})-(\d{1,2})-(\d{4})[ T](\d{1,2})[:h](\d{1,2})$/
+
+function formatDateTextDraftValue(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8)
+
+  if (digits.length <= 2) {
+    return digits
+  }
+
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}-${digits.slice(2)}`
+  }
+
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`
+}
+
+function formatDateTimeTextDraftValue(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 12)
+  const date = formatDateTextDraftValue(digits.slice(0, 8))
+
+  if (digits.length <= 8) {
+    return date
+  }
+
+  const timeDigits = digits.slice(8)
+
+  if (timeDigits.length <= 2) {
+    return `${date} ${timeDigits}`
+  }
+
+  return `${date} ${timeDigits.slice(0, 2)}:${timeDigits.slice(2)}`
+}
+
+function formatDateTextInputValue(value: string) {
+  const parts = isoDateParts(value)
+
+  if (!parts) {
+    return value
+  }
+
+  return `${padDatePart(parts.day)}-${padDatePart(parts.month)}-${padDatePart(
+    parts.year,
+    4
+  )}`
+}
+
+function formatDateTimeTextInputValue(value: string) {
+  const match = value.match(ISO_DATE_TIME_VALUE_PATTERN)
+
+  if (!match) {
+    return value
+  }
+
+  const [, year, month, day, hour, minute] = match
+  return `${day}-${month}-${year} ${hour}:${minute}`
+}
+
+function parseDateTextInputValue(value: string) {
+  const match = value.trim().match(DATE_TEXT_VALUE_PATTERN)
+
+  if (!match) {
+    return null
+  }
+
+  const [, dayValue, monthValue, yearValue] = match
+  const day = Number(dayValue)
+  const month = Number(monthValue)
+  const year = Number(yearValue)
+
+  if (!isValidDateParts(year, month, day)) {
+    return null
+  }
+
+  return `${padDatePart(year, 4)}-${padDatePart(month)}-${padDatePart(day)}`
+}
+
+function parseDateTimeTextInputValue(value: string) {
+  const match = value.trim().match(DATE_TIME_TEXT_VALUE_PATTERN)
+
+  if (!match) {
+    return null
+  }
+
+  const [, dayValue, monthValue, yearValue, hourValue, minuteValue] = match
+  const day = Number(dayValue)
+  const month = Number(monthValue)
+  const year = Number(yearValue)
+  const hour = Number(hourValue)
+  const minute = Number(minuteValue)
+
+  if (
+    !isValidDateParts(year, month, day) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null
+  }
+
+  return `${padDatePart(year, 4)}-${padDatePart(month)}-${padDatePart(
+    day
+  )}T${padDatePart(hour)}:${padDatePart(minute)}`
+}
+
+function isoDateParts(value: string) {
+  const match = value.match(ISO_DATE_VALUE_PATTERN)
+
+  if (!match) {
+    return null
+  }
+
+  const [, yearValue, monthValue, dayValue] = match
+  const year = Number(yearValue)
+  const month = Number(monthValue)
+  const day = Number(dayValue)
+
+  if (!isValidDateParts(year, month, day)) {
+    return null
+  }
+
+  return { day, month, year }
+}
+
+function dateFromIsoValue(value: string) {
+  const parts = isoDateParts(value)
+
+  if (!parts) {
+    return null
+  }
+
+  return new Date(parts.year, parts.month - 1, parts.day)
+}
+
+function isoDateFromDate(date: Date) {
+  return `${padDatePart(date.getFullYear(), 4)}-${padDatePart(
+    date.getMonth() + 1
+  )}-${padDatePart(date.getDate())}`
+}
+
+function timeFromIsoDateTime(value: string) {
+  const match = value.match(ISO_DATE_TIME_VALUE_PATTERN)
+
+  if (!match) {
+    return "00:00"
+  }
+
+  const [, , , , hour, minute] = match
+  return `${hour}:${minute}`
+}
+
+function isValidDateParts(year: number, month: number, day: number) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    year < 1 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return false
+  }
+
+  const date = new Date(0)
+  date.setFullYear(year, month - 1, day)
+  date.setHours(0, 0, 0, 0)
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  )
+}
+
+function padDatePart(value: number, length = 2) {
+  return value.toString().padStart(length, "0")
 }
 
 function dateTimeLocalInput(value: string) {
