@@ -5,7 +5,18 @@ export type CreatePatientInput = Pick<
   Patient,
   "firstName" | "lastName" | "birthDate"
 > &
-  Partial<Pick<Patient, "administrativeInfo" | "currentService" | "bedId">>
+  Partial<
+    Pick<
+      Patient,
+      | "sex"
+      | "address"
+      | "phoneNumber"
+      | "email"
+      | "administrativeInfo"
+      | "currentService"
+      | "bedId"
+    >
+  >
 
 export type UpdatePatientInput = Partial<CreatePatientInput>
 

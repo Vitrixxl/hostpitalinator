@@ -15,8 +15,10 @@ use crate::{
     },
     realtime::publish_change,
     state::AppState,
-    validation::require_non_empty,
+    validation::{require_non_empty, require_one_of},
 };
+
+const PATIENT_SEXES: &[&str] = &["female", "male", "other", "unknown"];
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +27,10 @@ pub struct Patient {
     pub first_name: String,
     pub last_name: String,
     pub birth_date: String,
+    pub sex: Option<String>,
+    pub address: Option<String>,
+    pub phone_number: Option<String>,
+    pub email: Option<String>,
     pub administrative_info: Option<String>,
     pub current_service: String,
     pub bed_id: Option<String>,
@@ -39,6 +45,10 @@ pub struct CreatePatientRequest {
     first_name: String,
     last_name: String,
     birth_date: String,
+    sex: Option<String>,
+    address: Option<String>,
+    phone_number: Option<String>,
+    email: Option<String>,
     administrative_info: Option<String>,
     current_service: Option<String>,
     bed_id: Option<String>,
@@ -50,7 +60,16 @@ pub struct UpdatePatientRequest {
     first_name: Option<String>,
     last_name: Option<String>,
     birth_date: Option<String>,
-    administrative_info: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    sex: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    address: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    phone_number: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    email: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    administrative_info: NullableStringField,
     current_service: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     bed_id: NullableStringField,
@@ -90,10 +109,16 @@ async fn list_patients(
             SELECT * FROM patients
             WHERE (? = '%%'
               OR first_name LIKE ?
-              OR last_name LIKE ?)
+              OR last_name LIKE ?
+              OR email LIKE ?
+              OR phone_number LIKE ?
+              OR address LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -106,10 +131,16 @@ async fn list_patients(
             WHERE archived_at IS NULL
               AND (? = '%%'
                 OR first_name LIKE ?
-                OR last_name LIKE ?)
+                OR last_name LIKE ?
+                OR email LIKE ?
+                OR phone_number LIKE ?
+                OR address LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -122,11 +153,17 @@ async fn list_patients(
             WHERE current_service = ?
               AND (? = '%%'
                 OR first_name LIKE ?
-                OR last_name LIKE ?)
+                OR last_name LIKE ?
+                OR email LIKE ?
+                OR phone_number LIKE ?
+                OR address LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
         .bind(&current_account.service)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -140,11 +177,17 @@ async fn list_patients(
               AND archived_at IS NULL
               AND (? = '%%'
                 OR first_name LIKE ?
-                OR last_name LIKE ?)
+                OR last_name LIKE ?
+                OR email LIKE ?
+                OR phone_number LIKE ?
+                OR address LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
         .bind(&current_account.service)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -172,6 +215,10 @@ async fn create_patient(
     payload.validate()?;
 
     let bed_id = payload.bed_id.and_then(normalize_optional);
+    let sex = payload.sex.and_then(normalize_optional);
+    let address = payload.address.and_then(normalize_optional);
+    let phone_number = payload.phone_number.and_then(normalize_optional);
+    let email = payload.email.and_then(normalize_optional);
     let bed_service = ensure_bed_assignable(&state, bed_id.as_deref(), None).await?;
     let current_service = resolve_patient_service(
         &state,
@@ -185,9 +232,10 @@ async fn create_patient(
     let patient = sqlx::query_as::<_, Patient>(
         r#"
         INSERT INTO patients (
-          id, first_name, last_name, birth_date, administrative_info, current_service, bed_id
+          id, first_name, last_name, birth_date, sex, address, phone_number, email,
+          administrative_info, current_service, bed_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
@@ -195,6 +243,10 @@ async fn create_patient(
     .bind(payload.first_name.trim())
     .bind(payload.last_name.trim())
     .bind(payload.birth_date.trim())
+    .bind(sex)
+    .bind(address)
+    .bind(phone_number)
+    .bind(email)
     .bind(payload.administrative_info.map(trim_optional))
     .bind(current_service)
     .bind(bed_id)
@@ -230,7 +282,12 @@ async fn update_patient(
     let first_name = payload.first_name.unwrap_or(current.first_name);
     let last_name = payload.last_name.unwrap_or(current.last_name);
     let birth_date = payload.birth_date.unwrap_or(current.birth_date);
-    let administrative_info = payload.administrative_info.or(current.administrative_info);
+    let sex = merge_nullable_string_field(payload.sex, current.sex);
+    let address = merge_nullable_string_field(payload.address, current.address);
+    let phone_number = merge_nullable_string_field(payload.phone_number, current.phone_number);
+    let email = merge_nullable_string_field(payload.email, current.email);
+    let administrative_info =
+        merge_nullable_string_field(payload.administrative_info, current.administrative_info);
     let bed_id = match requested_bed {
         NullableStringField::Present(Some(value)) => normalize_optional(value),
         NullableStringField::Present(None) => None,
@@ -259,6 +316,10 @@ async fn update_patient(
         SET first_name = ?,
             last_name = ?,
             birth_date = ?,
+            sex = ?,
+            address = ?,
+            phone_number = ?,
+            email = ?,
             administrative_info = ?,
             current_service = ?,
             bed_id = ?,
@@ -270,6 +331,10 @@ async fn update_patient(
     .bind(first_name.trim())
     .bind(last_name.trim())
     .bind(birth_date.trim())
+    .bind(sex)
+    .bind(address)
+    .bind(phone_number)
+    .bind(email)
     .bind(administrative_info.map(trim_optional))
     .bind(current_service)
     .bind(bed_id)
@@ -416,6 +481,9 @@ impl CreatePatientRequest {
         require_non_empty(&self.first_name, "firstName")?;
         require_non_empty(&self.last_name, "lastName")?;
         require_non_empty(&self.birth_date, "birthDate")?;
+        if let Some(sex) = &self.sex {
+            validate_patient_sex(sex)?;
+        }
         Ok(())
     }
 }
@@ -431,6 +499,9 @@ impl UpdatePatientRequest {
         if let Some(birth_date) = &self.birth_date {
             require_non_empty(birth_date, "birthDate")?;
         }
+        if let NullableStringField::Present(Some(sex)) = &self.sex {
+            validate_patient_sex(sex)?;
+        }
         if let Some(current_service) = &self.current_service {
             require_non_empty(current_service, "currentService")?;
         }
@@ -440,6 +511,27 @@ impl UpdatePatientRequest {
 
 fn trim_optional(value: String) -> String {
     value.trim().to_string()
+}
+
+fn merge_nullable_string_field(
+    field: NullableStringField,
+    current_value: Option<String>,
+) -> Option<String> {
+    match field {
+        NullableStringField::Missing => current_value,
+        NullableStringField::Present(Some(value)) => normalize_optional(value),
+        NullableStringField::Present(None) => None,
+    }
+}
+
+fn validate_patient_sex(value: &str) -> ApiResult<()> {
+    let value = value.trim();
+
+    if value.is_empty() {
+        return Ok(());
+    }
+
+    require_one_of(value, "sex", PATIENT_SEXES)
 }
 
 fn deserialize_nullable_string_field<'de, D>(

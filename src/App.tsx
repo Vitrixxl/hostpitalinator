@@ -158,13 +158,14 @@ import type {
   MedicalDocument,
   MedicalDocumentCategory,
   Patient,
+  PatientSex,
   Prescription,
   Service,
   UserRole,
   VitalRecord,
 } from "@/types"
 
-type AppView = "patients" | "admin"
+type AppView = "patients" | "new-patient" | "admin"
 type PatientTab =
   | "summary"
   | "vitals"
@@ -177,6 +178,10 @@ type PatientFormState = {
   firstName: string
   lastName: string
   birthDate: string
+  sex: string
+  address: string
+  phoneNumber: string
+  email: string
   currentService: string
   bedId: string
   administrativeInfo: string
@@ -312,6 +317,15 @@ const DOCUMENT_CATEGORIES = Object.keys(
   DOCUMENT_CATEGORY_LABELS
 ) as MedicalDocumentCategory[]
 
+const PATIENT_SEX_LABELS: Record<PatientSex, string> = {
+  female: "Femme",
+  male: "Homme",
+  other: "Autre",
+  unknown: "Non precise",
+}
+
+const PATIENT_SEXES = Object.keys(PATIENT_SEX_LABELS) as PatientSex[]
+
 const LAB_STATUS_LABELS: Record<LabStatus, string> = {
   normal: "Normal",
   alerte: "Alerte",
@@ -341,6 +355,7 @@ const PRESCRIPTION_STATUS_LABELS: Record<string, string> = {
 
 const PRESCRIPTION_STATUSES = Object.keys(PRESCRIPTION_STATUS_LABELS)
 const UNASSIGNED_BED_VALUE = "__unassigned__"
+const UNSELECTED_SEX_VALUE = "__sex_unselected__"
 const UNSELECTED_SERVICE_VALUE = "__service_unselected__"
 
 function App() {
@@ -693,11 +708,16 @@ function AppShell({
         firstName: patientForm.firstName,
         lastName: patientForm.lastName,
         birthDate: patientForm.birthDate,
+        sex: optionalValue(patientForm.sex) as PatientSex | undefined,
+        address: optionalValue(patientForm.address),
+        phoneNumber: optionalValue(patientForm.phoneNumber),
+        email: optionalValue(patientForm.email),
         currentService: patientForm.currentService || account.service,
         administrativeInfo: optionalValue(patientForm.administrativeInfo),
         bedId: optionalValue(patientForm.bedId),
       })
       setPatientForm(emptyPatientForm(account.service))
+      setActiveView("patients")
       setSelectedPatientId(created.id)
       await Promise.all([loadPatients(), loadBeds()])
     } catch (error) {
@@ -726,7 +746,7 @@ function AppShell({
           <div className="flex items-center gap-2">
             <Button
               type="button"
-              variant={activeView === "patients" ? "default" : "outline"}
+              variant={activeView !== "admin" ? "default" : "outline"}
               onClick={() => setActiveView("patients")}
             >
               <Users className="size-4" />
@@ -782,7 +802,7 @@ function AppShell({
               <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
               <Input
                 className="pl-8"
-                placeholder="Nom, prenom"
+                placeholder="Nom, prenom, mail, telephone"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -800,91 +820,20 @@ function AppShell({
 
             {patientError && <AlertMessage message={patientError} />}
 
-            <form
-              className="grid gap-3 rounded-lg border bg-background p-3"
-              onSubmit={handleCreatePatient}
+            <Button
+              type="button"
+              className="w-full justify-start"
+              variant={activeView === "new-patient" ? "default" : "outline"}
+              onClick={() => {
+                setActiveView("new-patient")
+                setSelectedPatientId(null)
+              }}
             >
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Plus className="size-4 text-primary" />
-                Nouveau patient
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  required
-                  placeholder="Prenom"
-                  value={patientForm.firstName}
-                  onChange={(event) =>
-                    setPatientForm((current) => ({
-                      ...current,
-                      firstName: event.target.value,
-                    }))
-                  }
-                />
-                <Input
-                  required
-                  placeholder="Nom"
-                  value={patientForm.lastName}
-                  onChange={(event) =>
-                    setPatientForm((current) => ({
-                      ...current,
-                      lastName: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  required
-                  type="date"
-                  value={patientForm.birthDate}
-                  onChange={(event) =>
-                    setPatientForm((current) => ({
-                      ...current,
-                      birthDate: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <ServiceSelect
-                services={services}
-                value={patientForm.currentService}
-                onChange={(currentService) =>
-                  setPatientForm((current) => ({
-                    ...current,
-                    currentService,
-                    bedId: "",
-                  }))
-                }
-                disabled={account.role !== "admin"}
-              />
-              <BedSelect
-                beds={beds}
-                service={patientForm.currentService || account.service}
-                value={patientForm.bedId}
-                onChange={(bedId) =>
-                  setPatientForm((current) => ({
-                    ...current,
-                    bedId,
-                  }))
-                }
-              />
-              <Textarea
-                placeholder="Informations administratives"
-                value={patientForm.administrativeInfo}
-                onChange={(event) =>
-                  setPatientForm((current) => ({
-                    ...current,
-                    administrativeInfo: event.target.value,
-                  }))
-                }
-              />
-              <Button type="submit">
-                <Plus className="size-4" />
-                Creer
-              </Button>
-            </form>
+              <Plus className="size-4" />
+              Nouveau patient
+            </Button>
 
-            <div className="max-h-[42vh] space-y-2 overflow-auto pr-1 lg:max-h-[calc(100vh-30rem)]">
+            <div className="max-h-[42vh] space-y-2 overflow-auto pr-1 lg:max-h-[calc(100vh-20rem)]">
               {patients.map((patient) => (
                 <button
                   key={patient.id}
@@ -908,12 +857,15 @@ function AppShell({
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    {patient.sex && <span>{patientSexLabel(patient.sex)}</span>}
                     {patient.currentService && (
                       <span>{patient.currentService}</span>
                     )}
                     {patient.bedId && (
                       <span>Lit {bedLabel(beds, patient.bedId)}</span>
                     )}
+                    {patient.phoneNumber && <span>{patient.phoneNumber}</span>}
+                    {patient.email && <span>{patient.email}</span>}
                   </div>
                 </button>
               ))}
@@ -932,6 +884,17 @@ function AppShell({
                 void loadBeds()
                 void loadServices()
               }}
+            />
+          ) : activeView === "new-patient" ? (
+            <PatientCreationPage
+              account={account}
+              beds={beds}
+              error={patientError}
+              form={patientForm}
+              services={services}
+              onCancel={() => setActiveView("patients")}
+              onChange={setPatientForm}
+              onSubmit={handleCreatePatient}
             />
           ) : selectedPatientId ? (
             <PatientWorkspace
@@ -952,6 +915,184 @@ function AppShell({
         </section>
       </div>
     </main>
+  )
+}
+
+function PatientCreationPage({
+  account,
+  beds,
+  error,
+  form,
+  services,
+  onCancel,
+  onChange,
+  onSubmit,
+}: {
+  account: Account
+  beds: Bed[]
+  error: string
+  form: PatientFormState
+  services: Service[]
+  onCancel: () => void
+  onChange: (form: PatientFormState) => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-heading text-2xl font-medium">
+            Creation d'un nouveau patient
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Identite, coordonnees et affectation initiale.
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Annuler
+        </Button>
+      </div>
+
+      {error && <AlertMessage message={error} />}
+
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <section className="rounded-lg border bg-background p-4">
+          <SectionTitle icon={UserPlus} title="Donnees administratives" />
+          <PatientFormFields
+            account={account}
+            administrativeRequired
+            beds={beds}
+            form={form}
+            services={services}
+            onChange={onChange}
+          />
+        </section>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Annuler
+          </Button>
+          <Button type="submit">
+            <Plus className="size-4" />
+            Creer le dossier
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function PatientFormFields({
+  account,
+  administrativeRequired = false,
+  beds,
+  currentPatientId,
+  form,
+  services,
+  onChange,
+}: {
+  account: Account
+  administrativeRequired?: boolean
+  beds: Bed[]
+  currentPatientId?: string
+  form: PatientFormState
+  services: Service[]
+  onChange: (form: PatientFormState) => void
+}) {
+  function updateField(field: keyof PatientFormState, value: string) {
+    onChange({ ...form, [field]: value })
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Prenom">
+          <Input
+            required
+            value={form.firstName}
+            onChange={(event) => updateField("firstName", event.target.value)}
+          />
+        </Field>
+        <Field label="Nom">
+          <Input
+            required
+            value={form.lastName}
+            onChange={(event) => updateField("lastName", event.target.value)}
+          />
+        </Field>
+        <Field label="Date de naissance">
+          <Input
+            required
+            type="date"
+            value={form.birthDate}
+            onChange={(event) => updateField("birthDate", event.target.value)}
+          />
+        </Field>
+        <Field label="Sexe">
+          <SexSelect
+            required={administrativeRequired}
+            value={form.sex}
+            onChange={(sex) => updateField("sex", sex)}
+          />
+        </Field>
+        <Field label="Service">
+          <ServiceSelect
+            services={services}
+            required
+            value={form.currentService}
+            onChange={(currentService) =>
+              onChange({ ...form, currentService, bedId: "" })
+            }
+            disabled={account.role !== "admin"}
+          />
+        </Field>
+        <Field label="Lit">
+          <BedSelect
+            beds={beds}
+            service={form.currentService || account.service}
+            currentPatientId={currentPatientId}
+            value={form.bedId}
+            onChange={(bedId) => updateField("bedId", bedId)}
+          />
+        </Field>
+        <div className="md:col-span-2">
+          <Field label="Adresse">
+            <Textarea
+              required={administrativeRequired}
+              className="min-h-20"
+              value={form.address}
+              onChange={(event) => updateField("address", event.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Telephone">
+          <Input
+            required={administrativeRequired}
+            type="tel"
+            value={form.phoneNumber}
+            onChange={(event) => updateField("phoneNumber", event.target.value)}
+          />
+        </Field>
+        <Field label="Courriel">
+          <Input
+            required={administrativeRequired}
+            type="email"
+            value={form.email}
+            onChange={(event) => updateField("email", event.target.value)}
+          />
+        </Field>
+      </div>
+
+      <Field label="Informations administratives">
+        <Textarea
+          className="min-h-28"
+          value={form.administrativeInfo}
+          onChange={(event) =>
+            updateField("administrativeInfo", event.target.value)
+          }
+        />
+      </Field>
+    </div>
   )
 }
 
@@ -1455,8 +1596,12 @@ function PatientWorkspace({
         firstName: patientForm.firstName,
         lastName: patientForm.lastName,
         birthDate: patientForm.birthDate,
+        sex: nullableOptionalValue(patientForm.sex) as PatientSex | null,
+        address: nullableOptionalValue(patientForm.address),
+        phoneNumber: nullableOptionalValue(patientForm.phoneNumber),
+        email: nullableOptionalValue(patientForm.email),
         currentService: patientForm.currentService,
-        administrativeInfo: optionalValue(patientForm.administrativeInfo),
+        administrativeInfo: nullableOptionalValue(patientForm.administrativeInfo),
         bedId: nullableOptionalValue(patientForm.bedId),
       })
       setPatient(updated)
@@ -1749,11 +1894,15 @@ function PatientWorkspace({
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
             <span>Ne(e) le {formatDate(patient.birthDate)}</span>
+            {patient.sex && <span>{patientSexLabel(patient.sex)}</span>}
             {patient.currentService && <span>{patient.currentService}</span>}
             {patient.bedId && <span>Lit {bedLabel(beds, patient.bedId)}</span>}
+            {patient.phoneNumber && <span>{patient.phoneNumber}</span>}
+            {patient.email && <span>{patient.email}</span>}
           </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricTile label="Sexe" value={patientSexLabel(patient.sex)} />
           <MetricTile label="Lit" value={bedLabel(beds, patient.bedId)} />
           <MetricTile
             label="Constantes"
@@ -1803,85 +1952,14 @@ function PatientWorkspace({
                   </Button>
                 }
               />
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Prenom">
-                  <Input
-                    required
-                    value={patientForm.firstName}
-                    onChange={(event) =>
-                      setPatientForm((current) => ({
-                        ...current,
-                        firstName: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Nom">
-                  <Input
-                    required
-                    value={patientForm.lastName}
-                    onChange={(event) =>
-                      setPatientForm((current) => ({
-                        ...current,
-                        lastName: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Date de naissance">
-                  <Input
-                    required
-                    type="date"
-                    value={patientForm.birthDate}
-                    onChange={(event) =>
-                      setPatientForm((current) => ({
-                        ...current,
-                        birthDate: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Service">
-                  <ServiceSelect
-                    services={services}
-                    value={patientForm.currentService}
-                    onChange={(currentService) =>
-                      setPatientForm((current) => ({
-                        ...current,
-                        currentService,
-                        bedId: "",
-                      }))
-                    }
-                    disabled={currentAccount.role !== "admin"}
-                  />
-                </Field>
-                <Field label="Lit">
-                  <BedSelect
-                    beds={beds}
-                    service={patientForm.currentService}
-                    currentPatientId={patient.id}
-                    value={patientForm.bedId}
-                    onChange={(bedId) =>
-                      setPatientForm((current) => ({
-                        ...current,
-                        bedId,
-                      }))
-                    }
-                  />
-                </Field>
-              </div>
-              <Field label="Informations administratives">
-                <Textarea
-                  className="min-h-28"
-                  value={patientForm.administrativeInfo}
-                  onChange={(event) =>
-                    setPatientForm((current) => ({
-                      ...current,
-                      administrativeInfo: event.target.value,
-                    }))
-                  }
-                />
-              </Field>
+              <PatientFormFields
+                account={currentAccount}
+                beds={beds}
+                currentPatientId={patient.id}
+                form={patientForm}
+                services={services}
+                onChange={setPatientForm}
+              />
             </form>
 
             <section className="space-y-4 rounded-lg border bg-background p-4">
@@ -4035,6 +4113,41 @@ function NumberField({
   )
 }
 
+function SexSelect({
+  value,
+  onChange,
+  required = false,
+}: {
+  value: string
+  onChange: (value: string) => void
+  required?: boolean
+}) {
+  return (
+    <Select
+      value={value || UNSELECTED_SEX_VALUE}
+      onValueChange={(nextValue) => {
+        onChange(nextValue === UNSELECTED_SEX_VALUE ? "" : nextValue)
+      }}
+      required={required}
+    >
+      <SelectTrigger className="max-w-full">
+        <Users className="size-4 text-muted-foreground" />
+        <SelectValue placeholder="Sexe" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNSELECTED_SEX_VALUE} disabled={required}>
+          {required ? "Selectionner" : "Non renseigne"}
+        </SelectItem>
+        {PATIENT_SEXES.map((sex) => (
+          <SelectItem key={sex} value={sex}>
+            {PATIENT_SEX_LABELS[sex]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 function BedSelect({
   beds,
   service,
@@ -4449,6 +4562,10 @@ function emptyPatientForm(currentService = ""): PatientFormState {
     firstName: "",
     lastName: "",
     birthDate: "",
+    sex: "",
+    address: "",
+    phoneNumber: "",
+    email: "",
     currentService,
     bedId: "",
     administrativeInfo: "",
@@ -4610,6 +4727,10 @@ function patientToForm(patient: Patient): PatientFormState {
     firstName: patient.firstName,
     lastName: patient.lastName,
     birthDate: patient.birthDate,
+    sex: patient.sex ?? "",
+    address: patient.address ?? "",
+    phoneNumber: patient.phoneNumber ?? "",
+    email: patient.email ?? "",
     currentService: patient.currentService,
     bedId: patient.bedId ?? "",
     administrativeInfo: patient.administrativeInfo ?? "",
@@ -4806,6 +4927,10 @@ function formatDate(value: string) {
   }
 
   return new Intl.DateTimeFormat("fr-FR").format(date)
+}
+
+function patientSexLabel(sex?: PatientSex | null) {
+  return sex ? PATIENT_SEX_LABELS[sex] ?? sex : "Non renseigne"
 }
 
 function formatShortDateTime(value: string) {

@@ -70,7 +70,7 @@ L'application doit maintenir une base de patients.
 Chaque patient doit avoir au minimum:
 
 - identite: nom, prenom, date de naissance;
-- informations administratives;
+- informations administratives: sexe, adresse, telephone, courriel;
 - service courant;
 - liste des prescriptions;
 - resultats d'analyses biologiques;

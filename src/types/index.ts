@@ -17,6 +17,6 @@ export type {
   LabResult,
   LabStatus,
 } from "@/types/lab"
-export type { Patient } from "@/types/patient"
+export type { Patient, PatientSex } from "@/types/patient"
 export type { Prescription } from "@/types/prescription"
 export type { VitalRecord } from "@/types/vital"

@@ -138,6 +138,10 @@ async fn create_patient(app: &Router, token: &str) -> Value {
             "firstName": "Ada",
             "lastName": "Lovelace",
             "birthDate": "1815-12-10",
+            "sex": "female",
+            "address": "12 rue des Algorithmes, Paris",
+            "phoneNumber": "01 23 45 67 89",
+            "email": "ada.lovelace@example.test",
             "administrativeInfo": "Dossier initial",
             "currentService": "Cardiologie"
         })),
@@ -456,6 +460,10 @@ async fn patients_can_be_created_and_listed() {
 
     let patient = create_patient(&context.app, &context.admin_token).await;
     assert_eq!(patient["firstName"], "Ada");
+    assert_eq!(patient["sex"], "female");
+    assert_eq!(patient["address"], "12 rue des Algorithmes, Paris");
+    assert_eq!(patient["phoneNumber"], "01 23 45 67 89");
+    assert_eq!(patient["email"], "ada.lovelace@example.test");
 
     let (list_status, list) = request_json(
         &context.app,
