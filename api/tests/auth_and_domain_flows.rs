@@ -128,7 +128,7 @@ async fn request_raw(
     (status, bytes)
 }
 
-async fn create_patient(app: &Router, token: &str, ipp: &str) -> Value {
+async fn create_patient(app: &Router, token: &str) -> Value {
     let (status, patient) = request_json(
         app,
         Method::POST,
@@ -138,7 +138,6 @@ async fn create_patient(app: &Router, token: &str, ipp: &str) -> Value {
             "firstName": "Ada",
             "lastName": "Lovelace",
             "birthDate": "1815-12-10",
-            "ipp": ipp,
             "administrativeInfo": "Dossier initial",
             "currentService": "Cardiologie"
         })),
@@ -311,7 +310,6 @@ async fn services_are_admin_managed_and_required_for_assignments() {
             "firstName": "Jean",
             "lastName": "Dupont",
             "birthDate": "1970-01-01",
-            "ipp": "IPP-SVC-001",
             "currentService": "Service libre"
         })),
     )
@@ -369,7 +367,7 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
     assert_eq!(login_status, StatusCode::OK, "{login}");
     let doctor_token = login["token"].as_str().expect("doctor token");
 
-    let cardio_patient = create_patient(&context.app, &context.admin_token, "IPP-SCOPE-001").await;
+    let cardio_patient = create_patient(&context.app, &context.admin_token).await;
     let cardio_patient_id = cardio_patient["id"].as_str().expect("patient id");
 
     let (med_status, med_patient) = request_json(
@@ -381,7 +379,6 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
             "firstName": "Alan",
             "lastName": "Turing",
             "birthDate": "1912-06-23",
-            "ipp": "IPP-SCOPE-002",
             "currentService": "Medecine"
         })),
     )
@@ -431,7 +428,6 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
             "firstName": "Grace",
             "lastName": "Hopper",
             "birthDate": "1906-12-09",
-            "ipp": "IPP-SCOPE-003",
             "currentService": "Medecine"
         })),
     )
@@ -446,8 +442,7 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
         Some(json!({
             "firstName": "Katherine",
             "lastName": "Johnson",
-            "birthDate": "1918-08-26",
-            "ipp": "IPP-SCOPE-004"
+            "birthDate": "1918-08-26"
         })),
     )
     .await;
@@ -456,12 +451,11 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
 }
 
 #[tokio::test]
-async fn patients_can_be_created_listed_and_reject_duplicate_ipp() {
+async fn patients_can_be_created_and_listed() {
     let context = test_context().await;
 
-    let patient = create_patient(&context.app, &context.admin_token, "IPP-001").await;
+    let patient = create_patient(&context.app, &context.admin_token).await;
     assert_eq!(patient["firstName"], "Ada");
-    assert_eq!(patient["ipp"], "IPP-001");
 
     let (list_status, list) = request_json(
         &context.app,
@@ -473,23 +467,6 @@ async fn patients_can_be_created_listed_and_reject_duplicate_ipp() {
     .await;
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list.as_array().expect("patient list").len(), 1);
-
-    let (conflict_status, conflict_body) = request_json(
-        &context.app,
-        Method::POST,
-        "/patients",
-        Some(&context.admin_token),
-        Some(json!({
-            "firstName": "Grace",
-            "lastName": "Hopper",
-            "birthDate": "1906-12-09",
-            "ipp": "IPP-001"
-        })),
-    )
-    .await;
-
-    assert_eq!(conflict_status, StatusCode::CONFLICT);
-    assert_eq!(conflict_body["error"]["code"], "conflict");
 }
 
 #[tokio::test]
@@ -518,7 +495,6 @@ async fn beds_can_be_listed_assigned_and_released() {
             "firstName": "Grace",
             "lastName": "Hopper",
             "birthDate": "1906-12-09",
-            "ipp": "IPP-BED-001",
             "bedId": first_bed
         })),
     )
@@ -548,7 +524,6 @@ async fn beds_can_be_listed_assigned_and_released() {
             "firstName": "Alan",
             "lastName": "Turing",
             "birthDate": "1912-06-23",
-            "ipp": "IPP-BED-002",
             "bedId": first_bed
         })),
     )
@@ -582,7 +557,7 @@ async fn beds_can_be_listed_assigned_and_released() {
 #[tokio::test]
 async fn vital_records_can_be_added_listed_and_return_latest() {
     let context = test_context().await;
-    let patient = create_patient(&context.app, &context.admin_token, "IPP-002").await;
+    let patient = create_patient(&context.app, &context.admin_token).await;
     let patient_id = patient["id"].as_str().expect("patient id");
     let vitals_uri = format!("/patients/{patient_id}/vitals");
 
@@ -700,7 +675,7 @@ async fn vital_records_can_be_added_listed_and_return_latest() {
 #[tokio::test]
 async fn all_domain_endpoints_have_working_create_and_list_paths() {
     let context = test_context().await;
-    let patient = create_patient(&context.app, &context.admin_token, "IPP-003").await;
+    let patient = create_patient(&context.app, &context.admin_token).await;
     let patient_id = patient["id"].as_str().expect("patient id");
 
     create_service(&context.app, &context.admin_token, "Oncologie").await;
@@ -757,6 +732,7 @@ async fn all_domain_endpoints_have_working_create_and_list_paths() {
     )
     .await;
     assert_eq!(prescription_status, StatusCode::OK, "{prescription}");
+    assert_eq!(prescription["prescriber"], "Admin");
 
     let prescription_id = prescription["id"].as_str().expect("prescription id");
     let (status_update_status, updated_prescription) = request_json(

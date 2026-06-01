@@ -41,7 +41,6 @@ pub struct AddPrescriptionRequest {
     route: String,
     start_date: String,
     end_date: Option<String>,
-    prescriber: String,
     status: String,
 }
 
@@ -88,6 +87,8 @@ async fn add_prescription(
 ) -> ApiResult<Json<Prescription>> {
     require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;
+    let prescriber = current_account.name.trim();
+    require_non_empty(prescriber, "prescriber")?;
 
     let prescription = sqlx::query_as::<_, Prescription>(
         r#"
@@ -106,7 +107,7 @@ async fn add_prescription(
     .bind(payload.route.trim())
     .bind(payload.start_date.trim())
     .bind(payload.end_date.map(trim_optional))
-    .bind(payload.prescriber.trim())
+    .bind(prescriber)
     .bind(payload.status.trim())
     .fetch_one(&state.pool)
     .await?;
@@ -173,7 +174,6 @@ impl AddPrescriptionRequest {
         require_non_empty(&self.frequency, "frequency")?;
         require_non_empty(&self.route, "route")?;
         require_non_empty(&self.start_date, "startDate")?;
-        require_non_empty(&self.prescriber, "prescriber")?;
         require_non_empty(&self.status, "status")?;
         Ok(())
     }

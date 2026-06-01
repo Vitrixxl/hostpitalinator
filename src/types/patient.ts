@@ -3,7 +3,6 @@ export type Patient = {
   firstName: string
   lastName: string
   birthDate: string
-  ipp: string
   administrativeInfo?: string | null
   currentService: string
   bedId?: string | null

@@ -174,7 +174,6 @@ type PatientFormState = {
   firstName: string
   lastName: string
   birthDate: string
-  ipp: string
   currentService: string
   bedId: string
   administrativeInfo: string
@@ -192,15 +191,26 @@ type VitalFormState = {
   lastStoolDate: string
 }
 
-type PrescriptionFormState = {
+type PrescriptionMedicationFormState = {
   medication: string
   dosage: string
   frequency: string
   route: string
+}
+
+type PrescriptionFormState = {
+  medications: PrescriptionMedicationFormState[]
   startDate: string
   endDate: string
-  prescriber: string
   status: string
+}
+
+type PrescriptionFilters = {
+  medication: string
+  prescriber: string
+  route: string
+  startDateFrom: string
+  startDateTo: string
 }
 
 type LabFormState = {
@@ -299,6 +309,13 @@ const DOCUMENT_CATEGORIES = Object.keys(
   DOCUMENT_CATEGORY_LABELS
 ) as MedicalDocumentCategory[]
 
+const LAB_STATUS_LABELS: Record<LabStatus, string> = {
+  normal: "Normal",
+  alerte: "Alerte",
+  critique: "Critique",
+  "a verifier": "A verifier",
+}
+
 const PATIENT_TABS: Array<{
   value: PatientTab
   label: string
@@ -312,7 +329,14 @@ const PATIENT_TABS: Array<{
   { value: "evolution", label: "Evolution", icon: Activity },
 ]
 
-const PRESCRIPTION_STATUSES = ["active", "paused", "completed", "stopped"]
+const PRESCRIPTION_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  paused: "En pause",
+  completed: "Terminee",
+  stopped: "Arretee",
+}
+
+const PRESCRIPTION_STATUSES = Object.keys(PRESCRIPTION_STATUS_LABELS)
 const UNASSIGNED_BED_VALUE = "__unassigned__"
 const UNSELECTED_SERVICE_VALUE = "__service_unselected__"
 
@@ -478,7 +502,7 @@ function AuthScreen({
 
             {mode === "login" ? (
               <form className="grid gap-4" onSubmit={handleLogin}>
-                <Field label="Email">
+                <Field label="Courriel">
                   <Input
                     type="email"
                     autoComplete="email"
@@ -529,7 +553,7 @@ function AuthScreen({
                     }
                   />
                 </Field>
-                <Field label="Email">
+                <Field label="Courriel">
                   <Input
                     type="email"
                     required
@@ -560,7 +584,7 @@ function AuthScreen({
                   ) : (
                     <UserPlus className="size-4" />
                   )}
-                  Creer le premier admin
+                  Creer le premier administrateur
                 </Button>
               </form>
             )}
@@ -666,7 +690,6 @@ function AppShell({
         firstName: patientForm.firstName,
         lastName: patientForm.lastName,
         birthDate: patientForm.birthDate,
-        ipp: patientForm.ipp,
         currentService: patientForm.currentService || account.service,
         administrativeInfo: optionalValue(patientForm.administrativeInfo),
         bedId: optionalValue(patientForm.bedId),
@@ -713,7 +736,7 @@ function AppShell({
                 onClick={() => setActiveView("admin")}
               >
                 <UserCog className="size-4" />
-                Admin
+                Administration
               </Button>
             )}
             <Button type="button" variant="ghost" onClick={onLogout}>
@@ -756,7 +779,7 @@ function AppShell({
               <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
               <Input
                 className="pl-8"
-                placeholder="Nom, prenom, IPP"
+                placeholder="Nom, prenom"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -815,17 +838,6 @@ function AppShell({
                     setPatientForm((current) => ({
                       ...current,
                       birthDate: event.target.value,
-                    }))
-                  }
-                />
-                <Input
-                  required
-                  placeholder="IPP"
-                  value={patientForm.ipp}
-                  onChange={(event) =>
-                    setPatientForm((current) => ({
-                      ...current,
-                      ipp: event.target.value,
                     }))
                   }
                 />
@@ -893,7 +905,6 @@ function AppShell({
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span>IPP {patient.ipp}</span>
                     {patient.currentService && (
                       <span>{patient.currentService}</span>
                     )}
@@ -981,12 +992,15 @@ function PatientWorkspace({
   const [labMarkerFilters, setLabMarkerFilters] = useState<
     Record<string, LabMarkerRangeFilter>
   >({})
+  const [prescriptionFilters, setPrescriptionFilters] =
+    useState<PrescriptionFilters>(emptyPrescriptionFilters())
   const [patientForm, setPatientForm] = useState<PatientFormState>(
     emptyPatientForm()
   )
   const [vitalForm, setVitalForm] = useState<VitalFormState>(emptyVitalForm())
   const [editingVitalId, setEditingVitalId] = useState<string | null>(null)
   const [vitalDialogOpen, setVitalDialogOpen] = useState(false)
+  const [prescriptionDialogOpen, setPrescriptionDialogOpen] = useState(false)
   const [prescriptionForm, setPrescriptionForm] =
     useState<PrescriptionFormState>(emptyPrescriptionForm())
   const [labForm, setLabForm] = useState<LabFormState>(emptyLabForm())
@@ -1270,6 +1284,52 @@ function PatientWorkspace({
     })
   }, [labMarkerFilters, labPanelFilter, labStatusFilter, labs])
 
+  const filteredPrescriptions = useMemo(
+    () =>
+      prescriptions.filter((prescription) => {
+        if (
+          !textIncludes(prescription.medication, prescriptionFilters.medication)
+        ) {
+          return false
+        }
+
+        if (!textIncludes(prescription.prescriber, prescriptionFilters.prescriber)) {
+          return false
+        }
+
+        if (!textIncludes(prescription.route, prescriptionFilters.route)) {
+          return false
+        }
+
+        const prescriptionStartDate = dateInput(prescription.startDate)
+
+        if (
+          prescriptionFilters.startDateFrom &&
+          prescriptionStartDate < prescriptionFilters.startDateFrom
+        ) {
+          return false
+        }
+
+        if (
+          prescriptionFilters.startDateTo &&
+          prescriptionStartDate > prescriptionFilters.startDateTo
+        ) {
+          return false
+        }
+
+        return true
+      }),
+    [prescriptionFilters, prescriptions]
+  )
+
+  const hasPrescriptionFilters = useMemo(
+    () =>
+      Object.values(prescriptionFilters).some(
+        (filterValue) => filterValue.trim() !== ""
+      ),
+    [prescriptionFilters]
+  )
+
   async function runAction(action: () => Promise<void>, okMessage: string) {
     setError("")
     setSuccess("")
@@ -1289,7 +1349,6 @@ function PatientWorkspace({
         firstName: patientForm.firstName,
         lastName: patientForm.lastName,
         birthDate: patientForm.birthDate,
-        ipp: patientForm.ipp,
         currentService: patientForm.currentService,
         administrativeInfo: optionalValue(patientForm.administrativeInfo),
         bedId: nullableOptionalValue(patientForm.bedId),
@@ -1374,20 +1433,48 @@ function PatientWorkspace({
 
   async function handleAddPrescription(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await runAction(async () => {
-      await addPrescription(patientId, {
-        medication: prescriptionForm.medication,
-        dosage: prescriptionForm.dosage,
-        frequency: prescriptionForm.frequency,
-        route: prescriptionForm.route,
-        startDate: prescriptionForm.startDate,
-        endDate: optionalValue(prescriptionForm.endDate),
-        prescriber: prescriptionForm.prescriber,
-        status: prescriptionForm.status,
-      })
-      setPrescriptionForm(emptyPrescriptionForm())
-      await loadWorkspace()
-    }, "Prescription ajoutee")
+    await runAction(
+      async () => {
+        const medicationInputs = prescriptionForm.medications.map(
+          trimPrescriptionMedicationForm
+        )
+
+        if (
+          medicationInputs.some(
+            (medication) =>
+              !medication.medication ||
+              !medication.dosage ||
+              !medication.frequency ||
+              !medication.route
+          )
+        ) {
+          throw new Error("Renseignez tous les medicaments de la prescription")
+        }
+
+        await Promise.all(
+          medicationInputs.map((medication) =>
+            addPrescription(patientId, {
+              ...medication,
+              startDate: prescriptionForm.startDate,
+              endDate: optionalValue(prescriptionForm.endDate),
+              status: prescriptionForm.status,
+            })
+          )
+        )
+
+        setPrescriptionForm(emptyPrescriptionForm())
+        setPrescriptionDialogOpen(false)
+        await loadWorkspace()
+      },
+      prescriptionForm.medications.length > 1
+        ? "Prescriptions ajoutees"
+        : "Prescription ajoutee"
+    )
+  }
+
+  function handleOpenPrescriptionDialog() {
+    setPrescriptionForm(emptyPrescriptionForm())
+    setPrescriptionDialogOpen(true)
   }
 
   async function handlePrescriptionStatus(
@@ -1555,7 +1642,6 @@ function PatientWorkspace({
             )}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
-            <span>IPP {patient.ipp}</span>
             <span>Ne(e) le {formatDate(patient.birthDate)}</span>
             {patient.currentService && <span>{patient.currentService}</span>}
             {patient.bedId && <span>Lit {bedLabel(beds, patient.bedId)}</span>}
@@ -1645,18 +1731,6 @@ function PatientWorkspace({
                       setPatientForm((current) => ({
                         ...current,
                         birthDate: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="IPP">
-                  <Input
-                    required
-                    value={patientForm.ipp}
-                    onChange={(event) =>
-                      setPatientForm((current) => ({
-                        ...current,
-                        ipp: event.target.value,
                       }))
                     }
                   />
@@ -2020,65 +2094,168 @@ function PatientWorkspace({
         </TabsContent>
 
         <TabsContent value="prescriptions">
-          <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
-            <div className="rounded-lg border bg-background p-4">
-              <SectionTitle icon={ClipboardList} title="Prescriptions" />
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Medicament</TableHead>
-                    <TableHead>Dose</TableHead>
-                    <TableHead>Frequence</TableHead>
-                    <TableHead>Voie</TableHead>
-                    <TableHead>Debut</TableHead>
-                    <TableHead>Prescripteur</TableHead>
-                    <TableHead>Statut</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {prescriptions.map((prescription) => (
-                    <TableRow key={prescription.id}>
-                      <TableCell>{prescription.medication}</TableCell>
-                      <TableCell>{prescription.dosage}</TableCell>
-                      <TableCell>{prescription.frequency}</TableCell>
-                      <TableCell>{prescription.route}</TableCell>
-                      <TableCell>{formatDate(prescription.startDate)}</TableCell>
-                      <TableCell>{prescription.prescriber}</TableCell>
-                      <TableCell>
-                        <Select
-                          value={prescription.status}
-                          onValueChange={(status) =>
-                            void handlePrescriptionStatus(
-                              prescription.id,
-                              status
-                            )
-                          }
-                        >
-                          <SelectTrigger className="max-w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PRESCRIPTION_STATUSES.map((status) => (
-                              <SelectItem key={status} value={status}>
-                                {status}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
+          <section className="grid gap-4">
+            <div className="space-y-4 rounded-lg border bg-background p-4">
+              <SectionTitle
+                icon={ClipboardList}
+                title="Prescriptions"
+                action={
+                  <Button type="button" onClick={handleOpenPrescriptionDialog}>
+                    <Plus className="size-4" />
+                    Nouvelle prescription
+                  </Button>
+                }
+              />
+
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label="Medicament">
+                  <Input
+                    className="w-52 max-w-full"
+                    value={prescriptionFilters.medication}
+                    onChange={(event) =>
+                      setPrescriptionFilters((current) => ({
+                        ...current,
+                        medication: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Prescripteur">
+                  <Input
+                    className="w-52 max-w-full"
+                    value={prescriptionFilters.prescriber}
+                    onChange={(event) =>
+                      setPrescriptionFilters((current) => ({
+                        ...current,
+                        prescriber: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Voie">
+                  <Input
+                    className="w-36 max-w-full"
+                    value={prescriptionFilters.route}
+                    onChange={(event) =>
+                      setPrescriptionFilters((current) => ({
+                        ...current,
+                        route: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Debut min">
+                  <Input
+                    className="w-40 max-w-full"
+                    type="date"
+                    value={prescriptionFilters.startDateFrom}
+                    onChange={(event) =>
+                      setPrescriptionFilters((current) => ({
+                        ...current,
+                        startDateFrom: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Debut max">
+                  <Input
+                    className="w-40 max-w-full"
+                    type="date"
+                    value={prescriptionFilters.startDateTo}
+                    onChange={(event) =>
+                      setPrescriptionFilters((current) => ({
+                        ...current,
+                        startDateTo: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!hasPrescriptionFilters}
+                  onClick={() =>
+                    setPrescriptionFilters(emptyPrescriptionFilters())
+                  }
+                >
+                  <XCircle className="size-4" />
+                  Effacer
+                </Button>
+              </div>
+
+              <div className="overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Medicament</TableHead>
+                      <TableHead>Dose</TableHead>
+                      <TableHead>Frequence</TableHead>
+                      <TableHead>Voie</TableHead>
+                      <TableHead>Debut</TableHead>
+                      <TableHead>Prescripteur</TableHead>
+                      <TableHead>Statut</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPrescriptions.map((prescription) => (
+                      <TableRow key={prescription.id}>
+                        <TableCell>{prescription.medication}</TableCell>
+                        <TableCell>{prescription.dosage}</TableCell>
+                        <TableCell>{prescription.frequency}</TableCell>
+                        <TableCell>{prescription.route}</TableCell>
+                        <TableCell>
+                          {formatDate(prescription.startDate)}
+                        </TableCell>
+                        <TableCell>{prescription.prescriber}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={prescription.status}
+                            onValueChange={(status) =>
+                              void handlePrescriptionStatus(
+                                prescription.id,
+                                status
+                              )
+                            }
+                          >
+                            <SelectTrigger className="max-w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PRESCRIPTION_STATUSES.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {prescriptionStatusLabel(status)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               {prescriptions.length === 0 && (
                 <EmptyState label="Aucune prescription" />
               )}
+              {prescriptions.length > 0 && filteredPrescriptions.length === 0 && (
+                <EmptyState label="Aucune prescription pour ces filtres" />
+              )}
             </div>
-            <PrescriptionForm
-              form={prescriptionForm}
-              onChange={setPrescriptionForm}
-              onSubmit={handleAddPrescription}
-            />
+
+            <Dialog
+              open={prescriptionDialogOpen}
+              onOpenChange={setPrescriptionDialogOpen}
+            >
+              <DialogContent className="sm:max-w-4xl">
+                <PrescriptionForm
+                  form={prescriptionForm}
+                  prescriber={currentAccount.name}
+                  onChange={setPrescriptionForm}
+                  onSubmit={handleAddPrescription}
+                  onCancel={() => setPrescriptionDialogOpen(false)}
+                />
+              </DialogContent>
+            </Dialog>
           </section>
         </TabsContent>
 
@@ -2129,7 +2306,7 @@ function PatientWorkspace({
                       <SelectItem value="all">Tous statuts</SelectItem>
                       {LAB_STATUSES.map((status) => (
                         <SelectItem key={status} value={status}>
-                          {status}
+                          {labStatusLabel(status)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2575,75 +2752,59 @@ function PatientWorkspace({
 
 function PrescriptionForm({
   form,
+  prescriber,
   onChange,
+  onCancel,
   onSubmit,
 }: {
   form: PrescriptionFormState
+  prescriber: string
   onChange: (form: PrescriptionFormState) => void
+  onCancel: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
+  function updateMedication(
+    index: number,
+    values: Partial<PrescriptionMedicationFormState>
+  ) {
+    onChange({
+      ...form,
+      medications: form.medications.map((medication, medicationIndex) =>
+        medicationIndex === index ? { ...medication, ...values } : medication
+      ),
+    })
+  }
+
+  function addMedication() {
+    onChange({
+      ...form,
+      medications: [...form.medications, emptyPrescriptionMedicationForm()],
+    })
+  }
+
+  function removeMedication(index: number) {
+    if (form.medications.length === 1) {
+      return
+    }
+
+    onChange({
+      ...form,
+      medications: form.medications.filter(
+        (_medication, medicationIndex) => medicationIndex !== index
+      ),
+    })
+  }
+
   return (
-    <form
-      className="grid content-start gap-3 rounded-lg border bg-background p-4"
-      onSubmit={onSubmit}
-    >
-      <SectionTitle icon={Plus} title="Nouvelle prescription" />
-      <Field label="Medicament">
-        <Input
-          required
-          value={form.medication}
-          onChange={(event) =>
-            onChange({ ...form, medication: event.target.value })
-          }
-        />
-      </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Dose">
-          <Input
-            required
-            value={form.dosage}
-            onChange={(event) =>
-              onChange({ ...form, dosage: event.target.value })
-            }
-          />
-        </Field>
-        <Field label="Frequence">
-          <Input
-            required
-            value={form.frequency}
-            onChange={(event) =>
-              onChange({ ...form, frequency: event.target.value })
-            }
-          />
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Voie">
-          <Input
-            required
-            value={form.route}
-            onChange={(event) => onChange({ ...form, route: event.target.value })}
-          />
-        </Field>
-        <Field label="Statut">
-          <Select
-            value={form.status}
-            onValueChange={(status) => onChange({ ...form, status })}
-          >
-            <SelectTrigger className="max-w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PRESCRIPTION_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
+    <form className="grid gap-5" onSubmit={onSubmit}>
+      <DialogHeader>
+        <DialogTitle>Nouvelle prescription</DialogTitle>
+        <DialogDescription className="sr-only">
+          Ajout d'une prescription medicamenteuse
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Debut">
           <Input
             required
@@ -2663,20 +2824,103 @@ function PrescriptionForm({
             }
           />
         </Field>
+        <Field label="Statut">
+          <Select
+            value={form.status}
+            onValueChange={(status) => onChange({ ...form, status })}
+          >
+            <SelectTrigger className="max-w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESCRIPTION_STATUSES.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {prescriptionStatusLabel(status)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Prescripteur">
+          <Input readOnly value={prescriber} />
+        </Field>
       </div>
-      <Field label="Prescripteur">
-        <Input
-          required
-          value={form.prescriber}
-          onChange={(event) =>
-            onChange({ ...form, prescriber: event.target.value })
-          }
-        />
-      </Field>
-      <Button type="submit">
-        <Plus className="size-4" />
-        Ajouter
-      </Button>
+
+      <div className="grid gap-3">
+        {form.medications.map((medication, index) => (
+          <div
+            key={index}
+            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]"
+          >
+            <Field label="Medicament">
+              <Input
+                required
+                value={medication.medication}
+                onChange={(event) =>
+                  updateMedication(index, { medication: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Dose">
+              <Input
+                required
+                value={medication.dosage}
+                onChange={(event) =>
+                  updateMedication(index, { dosage: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Frequence">
+              <Input
+                required
+                value={medication.frequency}
+                onChange={(event) =>
+                  updateMedication(index, { frequency: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Voie">
+              <Input
+                required
+                value={medication.route}
+                onChange={(event) =>
+                  updateMedication(index, { route: event.target.value })
+                }
+              />
+            </Field>
+            <div className="flex items-end justify-end">
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon-sm"
+                disabled={form.medications.length === 1}
+                onClick={() => removeMedication(index)}
+                aria-label="Retirer ce medicament"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <Button type="button" variant="outline" onClick={addMedication}>
+          <Plus className="size-4" />
+          Ajouter un medicament
+        </Button>
+      </div>
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          <XCircle className="size-4" />
+          Fermer
+        </Button>
+        <Button type="submit">
+          <Plus className="size-4" />
+          Ajouter
+        </Button>
+      </DialogFooter>
     </form>
   )
 }
@@ -2799,7 +3043,7 @@ function LabPanelDialog({
                           <SelectContent>
                             {LAB_STATUSES.map((status) => (
                               <SelectItem key={status} value={status}>
-                                {status}
+                                {labStatusLabel(status)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -3430,7 +3674,7 @@ function AdminPanel({
             <TableHeader>
               <TableRow>
                 <TableHead>Nom</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>Courriel</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead>Statut</TableHead>
@@ -3551,7 +3795,7 @@ function AccountFields({
           onChange={(event) => onChange({ ...form, name: event.target.value })}
         />
       </Field>
-      <Field label="Email">
+      <Field label="Courriel">
         <Input
           required
           type="email"
@@ -3959,6 +4203,7 @@ function EmptyState({ label }: { label: string }) {
 
 function StatusBadge({ label }: { label: string }) {
   const normalized = label.toLowerCase()
+  const displayLabel = labStatusLabel(label)
   const variant =
     normalized.includes("critique") || normalized.includes("alerte")
       ? "destructive"
@@ -3966,7 +4211,15 @@ function StatusBadge({ label }: { label: string }) {
         ? "secondary"
         : "outline"
 
-  return <Badge variant={variant}>{label}</Badge>
+  return <Badge variant={variant}>{displayLabel}</Badge>
+}
+
+function labStatusLabel(status: string) {
+  return LAB_STATUS_LABELS[status as LabStatus] ?? "Statut inconnu"
+}
+
+function prescriptionStatusLabel(status: string) {
+  return PRESCRIPTION_STATUS_LABELS[status] ?? "Statut inconnu"
 }
 
 function formatLabPanelPreview(panel: LabPanel) {
@@ -4090,7 +4343,6 @@ function emptyPatientForm(currentService = ""): PatientFormState {
     firstName: "",
     lastName: "",
     birthDate: "",
-    ipp: "",
     currentService,
     bedId: "",
     administrativeInfo: "",
@@ -4142,14 +4394,40 @@ function vitalFormToInput(form: VitalFormState) {
 
 function emptyPrescriptionForm(): PrescriptionFormState {
   return {
+    medications: [emptyPrescriptionMedicationForm()],
+    startDate: todayInput(),
+    endDate: "",
+    status: "active",
+  }
+}
+
+function emptyPrescriptionMedicationForm(): PrescriptionMedicationFormState {
+  return {
     medication: "",
     dosage: "",
     frequency: "",
     route: "",
-    startDate: todayInput(),
-    endDate: "",
+  }
+}
+
+function trimPrescriptionMedicationForm(
+  medication: PrescriptionMedicationFormState
+): PrescriptionMedicationFormState {
+  return {
+    medication: medication.medication.trim(),
+    dosage: medication.dosage.trim(),
+    frequency: medication.frequency.trim(),
+    route: medication.route.trim(),
+  }
+}
+
+function emptyPrescriptionFilters(): PrescriptionFilters {
+  return {
+    medication: "",
     prescriber: "",
-    status: "active",
+    route: "",
+    startDateFrom: "",
+    startDateTo: "",
   }
 }
 
@@ -4226,7 +4504,6 @@ function patientToForm(patient: Patient): PatientFormState {
     firstName: patient.firstName,
     lastName: patient.lastName,
     birthDate: patient.birthDate,
-    ipp: patient.ipp,
     currentService: patient.currentService,
     bedId: patient.bedId ?? "",
     administrativeInfo: patient.administrativeInfo ?? "",
@@ -4269,6 +4546,16 @@ function bedFormToInput(form: BedFormState) {
 function optionalValue(value: string) {
   const trimmed = value.trim()
   return trimmed === "" ? undefined : trimmed
+}
+
+function textIncludes(value: string, filter: string) {
+  const normalizedFilter = filter.trim().toLocaleLowerCase()
+
+  if (!normalizedFilter) {
+    return true
+  }
+
+  return value.toLocaleLowerCase().includes(normalizedFilter)
 }
 
 function nullableOptionalValue(value: string) {

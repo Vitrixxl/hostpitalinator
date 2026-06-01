@@ -83,7 +83,7 @@ export const LAB_PANEL_DEFINITIONS = [
     markers: [
       marker("tp", "TP", "%", "70-100"),
       marker("inr", "INR", "", "0.8-1.2"),
-      marker("tca", "TCA ratio", "", "0.8-1.2"),
+      marker("tca", "Ratio TCA", "", "0.8-1.2"),
       marker("fibrinogene", "Fibrinogene", "g/L", "2.0-4.0"),
       marker("d_dimeres", "D-dimeres", "ng/mL", "< 500"),
       marker("anti_xa", "Activite anti-Xa", "UI/mL", "Selon traitement"),
@@ -103,10 +103,10 @@ export const LAB_PANEL_DEFINITIONS = [
     type: "Bilan lipidique",
     markers: [
       marker("cholesterol_total", "Cholesterol total", "mmol/L", "< 5.2"),
-      marker("hdl", "HDL cholesterol", "mmol/L", "> 1.0"),
-      marker("ldl", "LDL cholesterol", "mmol/L", "Selon risque"),
+      marker("hdl", "Cholesterol HDL", "mmol/L", "> 1.0"),
+      marker("ldl", "Cholesterol LDL", "mmol/L", "Selon risque"),
       marker("triglycerides", "Triglycerides", "mmol/L", "< 1.7"),
-      marker("non_hdl", "Non-HDL cholesterol", "mmol/L", "Selon risque"),
+      marker("non_hdl", "Cholesterol non-HDL", "mmol/L", "Selon risque"),
     ],
   },
   {
@@ -118,7 +118,7 @@ export const LAB_PANEL_DEFINITIONS = [
       marker("hco3", "HCO3-", "mmol/L", "22-26"),
       marker("sao2", "SaO2", "%", "95-100"),
       marker("lactates", "Lactates", "mmol/L", "< 2.0"),
-      marker("base_excess", "Base excess", "mmol/L", "-2 a +2"),
+      marker("base_excess", "Exces de base", "mmol/L", "-2 a +2"),
       marker("fio2", "FiO2", "%", "21"),
     ],
   },

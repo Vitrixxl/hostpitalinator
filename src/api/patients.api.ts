@@ -3,7 +3,7 @@ import type { Patient } from "@/types"
 
 export type CreatePatientInput = Pick<
   Patient,
-  "firstName" | "lastName" | "birthDate" | "ipp"
+  "firstName" | "lastName" | "birthDate"
 > &
   Partial<Pick<Patient, "administrativeInfo" | "currentService" | "bedId">>
 

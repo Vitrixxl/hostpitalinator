@@ -70,7 +70,6 @@ L'application doit maintenir une base de patients.
 Chaque patient doit avoir au minimum:
 
 - identite: nom, prenom, date de naissance;
-- identifiant patient interne, par exemple IPP;
 - informations administratives;
 - service courant;
 - liste des prescriptions;

@@ -3,7 +3,7 @@ import type { Prescription } from "@/types"
 
 export type AddPrescriptionInput = Omit<
   Prescription,
-  "id" | "patientId" | "createdAt" | "updatedAt"
+  "id" | "patientId" | "prescriber" | "createdAt" | "updatedAt"
 >
 
 export function listPrescriptions(patientId: string) {
