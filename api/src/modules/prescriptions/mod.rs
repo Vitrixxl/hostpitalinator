@@ -9,7 +9,10 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    modules::{auth::CurrentAccount, patients::require_patient_scope},
+    modules::{
+        auth::CurrentAccount, medicines::find_commercialized_medicine_name,
+        patients::require_patient_scope,
+    },
     realtime::publish_change,
     state::AppState,
     validation::require_non_empty,
@@ -20,6 +23,7 @@ use crate::{
 pub struct Prescription {
     id: String,
     patient_id: String,
+    medicine_id: Option<String>,
     medication: String,
     dosage: String,
     frequency: String,
@@ -35,7 +39,7 @@ pub struct Prescription {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddPrescriptionRequest {
-    medication: String,
+    medicine_id: String,
     dosage: String,
     frequency: String,
     route: String,
@@ -89,19 +93,24 @@ async fn add_prescription(
     payload.validate()?;
     let prescriber = current_account.name.trim();
     require_non_empty(prescriber, "prescriber")?;
+    let medicine_id = payload.medicine_id.trim();
+    let medication = find_commercialized_medicine_name(&state, medicine_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("Medicine not found"))?;
 
     let prescription = sqlx::query_as::<_, Prescription>(
         r#"
         INSERT INTO prescriptions (
-          id, patient_id, medication, dosage, frequency, route, start_date, end_date, prescriber, status
+          id, patient_id, medicine_id, medication, dosage, frequency, route, start_date, end_date, prescriber, status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
     .bind(Uuid::new_v4().to_string())
     .bind(patient_id.clone())
-    .bind(payload.medication.trim())
+    .bind(medicine_id)
+    .bind(medication)
     .bind(payload.dosage.trim())
     .bind(payload.frequency.trim())
     .bind(payload.route.trim())
@@ -169,7 +178,7 @@ async fn update_prescription_status(
 
 impl AddPrescriptionRequest {
     fn validate(&self) -> ApiResult<()> {
-        require_non_empty(&self.medication, "medication")?;
+        require_non_empty(&self.medicine_id, "medicineId")?;
         require_non_empty(&self.dosage, "dosage")?;
         require_non_empty(&self.frequency, "frequency")?;
         require_non_empty(&self.route, "route")?;

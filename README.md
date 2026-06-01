@@ -20,6 +20,7 @@ Application hospitaliere basee sur React, shadcn/ui, une API HTTP Rust separee a
 bun install
 bun run dev
 bun run api:dev
+bun run medicines:import
 bun run build
 bun run api:build
 docker compose up --build
@@ -40,6 +41,11 @@ Variables utiles:
 - `DATABASE_URL`: defaut `sqlite://api/data/hospitalinator.sqlite`
 - `FILE_STORAGE_DIR`: defaut `api/data/documents`
 - `WEB_DIST_DIR`: dossier du build frontend servi par l'API; si absent, l'API tente `dist` a la racine du projet quand il existe
+
+Referentiel medicaments:
+
+- `GET /medicines?search=doliprane`: recherche les specialites commercialisees du referentiel local BDPM.
+- `bun run medicines:import`: telecharge `CIS_bdpm.txt` et `CIS_COMPO_bdpm.txt` depuis la BDPM officielle et met a jour la table `medicines`.
 
 Routes publiques minimales:
 
@@ -76,6 +82,7 @@ Les donnees SQLite et les documents sont conserves dans le volume Docker `hospit
 - `src/api`: facade TypeScript pour appeler l'API HTTP.
 - `api/src`: API HTTP Rust separee consommee par le frontend.
 - `api/migrations`: migrations SQLite de l'API.
+- `scripts/import-bdpm.ts`: import du referentiel officiel BDPM dans SQLite.
 - `src/components/ui`: composants shadcn/ui.
 - `src/features`: modules fonctionnels a implementer.
 - `src/types`: types partages cote frontend.

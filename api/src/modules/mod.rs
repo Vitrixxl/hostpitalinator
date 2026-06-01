@@ -4,6 +4,7 @@ pub mod beds;
 pub mod documents;
 pub mod evolutions;
 pub mod labs;
+pub mod medicines;
 pub mod patients;
 pub mod prescriptions;
 pub mod services;

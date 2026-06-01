@@ -1,10 +1,15 @@
 import { callApi } from "@/api/client"
 import type { Prescription } from "@/types"
 
-export type AddPrescriptionInput = Omit<
-  Prescription,
-  "id" | "patientId" | "prescriber" | "createdAt" | "updatedAt"
->
+export type AddPrescriptionInput = {
+  medicineId: string
+  dosage: string
+  frequency: string
+  route: string
+  startDate: string
+  endDate?: string
+  status: string
+}
 
 export function listPrescriptions(patientId: string) {
   return callApi<Prescription[]>(`/patients/${patientId}/prescriptions`)

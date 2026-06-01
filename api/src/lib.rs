@@ -39,6 +39,7 @@ where
         .merge(modules::services::routes())
         .merge(modules::beds::routes())
         .merge(modules::patients::routes())
+        .merge(modules::medicines::routes())
         .merge(modules::vitals::routes())
         .merge(modules::prescriptions::routes())
         .merge(modules::labs::routes())

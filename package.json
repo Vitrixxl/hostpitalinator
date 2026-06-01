@@ -9,6 +9,7 @@
     "api:dev": "cargo run --manifest-path api/Cargo.toml",
     "api:build": "cargo build --manifest-path api/Cargo.toml",
     "api:start": "cargo run --manifest-path api/Cargo.toml",
+    "medicines:import": "bun run scripts/import-bdpm.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

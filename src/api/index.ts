@@ -50,6 +50,7 @@ export {
   listLabResults,
   type AddLabResultInput,
 } from "@/api/labs.api"
+export { searchMedicines } from "@/api/medicines.api"
 export {
   archivePatient,
   createPatient,

@@ -88,6 +88,7 @@ import {
   openMedicalDocument,
   resetAccountPassword,
   searchAddressSuggestions,
+  searchMedicines,
   setRealtimeContext,
   subscribeRealtime,
   type AddressSuggestion,
@@ -125,6 +126,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
@@ -162,6 +164,7 @@ import type {
   LabStatus,
   MedicalDocument,
   MedicalDocumentCategory,
+  Medicine,
   Patient,
   PatientSex,
   Prescription,
@@ -206,7 +209,9 @@ type VitalFormState = {
 }
 
 type PrescriptionMedicationFormState = {
+  medicineId: string
   medication: string
+  medicationQuery: string
   dosage: string
   frequency: string
   route: string
@@ -361,6 +366,7 @@ const PRESCRIPTION_STATUSES = Object.keys(PRESCRIPTION_STATUS_LABELS)
 const UNASSIGNED_BED_VALUE = "__unassigned__"
 const UNSELECTED_SERVICE_VALUE = "__service_unselected__"
 const ADDRESS_QUERY_MIN_LENGTH = 3
+const MEDICINE_QUERY_MIN_LENGTH = 2
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null)
@@ -1711,19 +1717,22 @@ function PatientWorkspace({
         if (
           medicationInputs.some(
             (medication) =>
-              !medication.medication ||
+              !medication.medicineId ||
               !medication.dosage ||
               !medication.frequency ||
               !medication.route
           )
         ) {
-          throw new Error("Renseignez tous les medicaments de la prescription")
+          throw new Error("Selectionnez un medicament reference pour chaque ligne")
         }
 
         await Promise.all(
           medicationInputs.map((medication) =>
             addPrescription(patientId, {
-              ...medication,
+              medicineId: medication.medicineId,
+              dosage: medication.dosage,
+              frequency: medication.frequency,
+              route: medication.route,
               startDate: prescriptionForm.startDate,
               endDate: optionalValue(prescriptionForm.endDate),
               status: prescriptionForm.status,
@@ -3052,15 +3061,12 @@ function PrescriptionForm({
         {form.medications.map((medication, index) => (
           <div
             key={index}
-            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]"
+            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]"
           >
             <Field label="Medicament">
-              <Input
-                required
-                value={medication.medication}
-                onChange={(event) =>
-                  updateMedication(index, { medication: event.target.value })
-                }
+              <MedicineSearchInput
+                medication={medication}
+                onChange={(values) => updateMedication(index, values)}
               />
             </Field>
             <Field label="Dose">
@@ -3124,6 +3130,165 @@ function PrescriptionForm({
         </Button>
       </DialogFooter>
     </form>
+  )
+}
+
+function MedicineSearchInput({
+  medication,
+  onChange,
+}: {
+  medication: PrescriptionMedicationFormState
+  onChange: (values: Partial<PrescriptionMedicationFormState>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [results, setResults] = useState<Medicine[]>([])
+  const [loading, setLoading] = useState(false)
+  const [searchError, setSearchError] = useState("")
+  const query = medication.medicationQuery.trim()
+  const selected = medication.medicineId !== ""
+
+  useEffect(() => {
+    if (selected || query.length < MEDICINE_QUERY_MIN_LENGTH) {
+      return
+    }
+
+    let cancelled = false
+    const timeout = window.setTimeout(() => {
+      setLoading(true)
+      setSearchError("")
+
+      searchMedicines(query)
+        .then((medicines) => {
+          if (!cancelled) {
+            setResults(medicines)
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setResults([])
+            setSearchError(errorMessage(error))
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [query, selected])
+
+  function handleQueryChange(value: string) {
+    setResults([])
+    setLoading(false)
+    setSearchError("")
+
+    const hasSearchLength = value.trim().length >= MEDICINE_QUERY_MIN_LENGTH
+
+    onChange({
+      medicineId: "",
+      medication: "",
+      medicationQuery: value,
+      dosage: "",
+      route: "",
+    })
+    setOpen(hasSearchLength)
+  }
+
+  function selectMedicine(medicine: Medicine) {
+    onChange({
+      medicineId: medicine.id,
+      medication: medicine.name,
+      medicationQuery: medicine.name,
+      dosage: defaultMedicineDosage(medicine),
+      route: defaultMedicineRoute(medicine),
+    })
+    setOpen(false)
+    setResults([])
+    setLoading(false)
+    setSearchError("")
+  }
+
+  const showResults =
+    open && !selected && query.length >= MEDICINE_QUERY_MIN_LENGTH
+
+  return (
+    <div className="grid gap-1">
+      <Popover open={showResults} onOpenChange={setOpen}>
+        <PopoverAnchor asChild>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              required
+              className="pr-2.5 pl-8"
+              value={medication.medicationQuery}
+              aria-invalid={!selected && medication.medicationQuery.trim() !== ""}
+              onFocus={() => setOpen(true)}
+              onChange={(event) => handleQueryChange(event.target.value)}
+            />
+          </div>
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          className="w-[min(34rem,calc(100vw-2rem))] p-1"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <div className="max-h-72 overflow-auto">
+            {loading && (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                Recherche...
+              </p>
+            )}
+            {!loading && searchError && (
+              <p className="px-3 py-2 text-sm text-destructive">
+                {searchError}
+              </p>
+            )}
+            {!loading && !searchError && results.length === 0 && (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                Aucun medicament trouve
+              </p>
+            )}
+            {!loading &&
+              !searchError &&
+              results.map((medicine) => (
+                <button
+                  key={medicine.id}
+                  type="button"
+                  className="grid w-full gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                  onClick={() => selectMedicine(medicine)}
+                >
+                  <span className="font-medium">{medicine.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    CIS {medicine.id}
+                    {medicine.form ? ` · ${medicine.form}` : ""}
+                    {medicine.administrationRoutes
+                      ? ` · ${medicine.administrationRoutes}`
+                      : ""}
+                  </span>
+                  {medicine.activeSubstances || medicine.dosageSummary ? (
+                    <span className="text-xs text-muted-foreground">
+                      {[medicine.activeSubstances, medicine.dosageSummary]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+      {selected && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <Badge variant="secondary">CIS {medication.medicineId}</Badge>
+          <span className="truncate">{medication.medication}</span>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -4839,7 +5004,9 @@ function emptyPrescriptionForm(): PrescriptionFormState {
 
 function emptyPrescriptionMedicationForm(): PrescriptionMedicationFormState {
   return {
+    medicineId: "",
     medication: "",
+    medicationQuery: "",
     dosage: "",
     frequency: "",
     route: "",
@@ -4850,11 +5017,40 @@ function trimPrescriptionMedicationForm(
   medication: PrescriptionMedicationFormState
 ): PrescriptionMedicationFormState {
   return {
+    medicineId: medication.medicineId.trim(),
     medication: medication.medication.trim(),
+    medicationQuery: medication.medicationQuery.trim(),
     dosage: medication.dosage.trim(),
     frequency: medication.frequency.trim(),
     route: medication.route.trim(),
   }
+}
+
+function defaultMedicineRoute(medicine: Medicine) {
+  return (
+    medicine.administrationRoutes
+      .split(";")
+      .map((route) => route.trim())
+      .find(Boolean) ?? ""
+  )
+}
+
+function defaultMedicineDosage(medicine: Medicine) {
+  const dosageSummary = medicine.dosageSummary.trim()
+
+  if (dosageSummary) {
+    return dosageSummary
+  }
+
+  return extractMedicineDosage(medicine.name)
+}
+
+function extractMedicineDosage(name: string) {
+  return (
+    name.match(
+      /\b\d+(?:[,.]\d+)?\s*(?:microgrammes?|mg|g|ml|ui|u\.i\.|%)\b/i
+    )?.[0] ?? ""
+  )
 }
 
 function emptyPrescriptionFilters(): PrescriptionFilters {

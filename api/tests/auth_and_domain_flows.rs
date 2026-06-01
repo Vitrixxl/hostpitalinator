@@ -724,6 +724,21 @@ async fn all_domain_endpoints_have_working_create_and_list_paths() {
     assert_eq!(accounts_status, StatusCode::OK);
     assert_eq!(accounts.as_array().expect("accounts list").len(), 2);
 
+    let (medicines_status, medicines) = request_json(
+        &context.app,
+        Method::GET,
+        "/medicines?search=doliprane",
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(medicines_status, StatusCode::OK, "{medicines}");
+    assert!(medicines
+        .as_array()
+        .expect("medicines list")
+        .iter()
+        .any(|medicine| medicine["id"] == "60234100"));
+
     let prescriptions_uri = format!("/patients/{patient_id}/prescriptions");
     let (prescription_status, prescription) = request_json(
         &context.app,
@@ -731,7 +746,7 @@ async fn all_domain_endpoints_have_working_create_and_list_paths() {
         &prescriptions_uri,
         Some(&context.admin_token),
         Some(json!({
-            "medication": "Paracetamol",
+            "medicineId": "60234100",
             "dosage": "1 g",
             "frequency": "3 fois par jour",
             "route": "PO",
@@ -743,6 +758,8 @@ async fn all_domain_endpoints_have_working_create_and_list_paths() {
     .await;
     assert_eq!(prescription_status, StatusCode::OK, "{prescription}");
     assert_eq!(prescription["prescriber"], "Admin");
+    assert_eq!(prescription["medicineId"], "60234100");
+    assert_eq!(prescription["medication"], "DOLIPRANE 1000 mg, comprimé");
 
     let prescription_id = prescription["id"].as_str().expect("prescription id");
     let (status_update_status, updated_prescription) = request_json(
