@@ -60,6 +60,7 @@ import {
   formatEvolutionNoteMonth,
   formatEvolutionNoteTime,
   formatShortDateTime,
+  nowLocalInput,
 } from "@/app/date-utils"
 import { errorMessage } from "@/app/error-utils"
 import { filenameFromDisposition, readFileAsDataUrl } from "@/app/file-utils"
@@ -117,7 +118,7 @@ import {
 import { AlertMessage, EmptyState, StatusBadge } from "@/components/common/Feedback"
 import { Field } from "@/components/common/Field"
 import { DateTextInput, DateTimeTextInput } from "@/components/common/DateInputs"
-import { NumberField, ServiceSelect } from "@/components/common/FormControls"
+import { NumberField } from "@/components/common/FormControls"
 import { LoadingScreen } from "@/components/common/LoadingScreen"
 import { SectionTitle } from "@/components/common/SectionTitle"
 import { Button } from "@/components/ui/button"
@@ -742,7 +743,10 @@ export function PatientWorkspace({
           vitalFormToInput(vitalForm)
         )
       } else {
-        await addVitalRecord(patientId, vitalFormToInput(vitalForm))
+        await addVitalRecord(
+          patientId,
+          vitalFormToInput(vitalForm, nowLocalInput())
+        )
       }
 
       setEditingVitalId(null)
@@ -954,10 +958,10 @@ export function PatientWorkspace({
     event.preventDefault()
     await runAction(async () => {
       await addEvolutionNote(patientId, {
-        service: evolutionForm.service,
+        service: patient?.currentService ?? currentAccount.service,
         visitId: evolutionForm.visitId,
         author: currentAccount.name,
-        recordedAt: evolutionForm.recordedAt,
+        recordedAt: nowLocalInput(),
         content: evolutionForm.content,
       })
       setEvolutionForm((current) => ({
@@ -1301,18 +1305,20 @@ export function PatientWorkspace({
                       Saisie des constantes vitales
                     </DialogDescription>
                   </DialogHeader>
-                  <Field label="Date et heure">
-                    <DateTimeTextInput
-                      required
-                      value={vitalForm.recordedAt}
-                      onValueChange={(recordedAt) =>
-                        setVitalForm((current) => ({
-                          ...current,
-                          recordedAt,
-                        }))
-                      }
-                    />
-                  </Field>
+                  {editingVitalId ? (
+                    <Field label="Date et heure">
+                      <DateTimeTextInput
+                        required
+                        value={vitalForm.recordedAt}
+                        onValueChange={(recordedAt) =>
+                          setVitalForm((current) => ({
+                            ...current,
+                            recordedAt,
+                          }))
+                        }
+                      />
+                    </Field>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-2">
                     <NumberField
                       label="Temperature"
@@ -1901,73 +1907,27 @@ export function PatientWorkspace({
               className="grid gap-4 rounded-lg border bg-background p-4"
               onSubmit={handleAddEvolution}
             >
-              <SectionTitle
-                icon={Activity}
-                title="Nouvelle note d'evolution"
-                action={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setEvolutionDraftOpen(false)}
-                  >
-                    <FileText className="size-4" />
-                    Notes
-                  </Button>
+              <div className="grid gap-1">
+                <h2 className="font-heading text-base font-medium">
+                  Nouvelle note d'évolution
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Saisissez uniquement le contenu clinique de la note.
+                </p>
+              </div>
+              <Textarea
+                required
+                aria-label="Contenu de la note"
+                className="min-h-72"
+                placeholder="Contenu de la note"
+                value={evolutionForm.content}
+                onChange={(event) =>
+                  setEvolutionForm((current) => ({
+                    ...current,
+                    content: event.target.value,
+                  }))
                 }
               />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Field label="Service">
-                  <ServiceSelect
-                    services={services}
-                    required
-                    value={evolutionForm.service}
-                    onChange={(service) =>
-                      setEvolutionForm((current) => ({
-                        ...current,
-                        service,
-                      }))
-                    }
-                    disabled
-                  />
-                </Field>
-                <Field label="Passage">
-                  <Input
-                    required
-                    value={evolutionForm.visitId}
-                    onChange={(event) =>
-                      setEvolutionForm((current) => ({
-                        ...current,
-                        visitId: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-              </div>
-              <Field label="Date et heure">
-                <DateTimeTextInput
-                  required
-                  value={evolutionForm.recordedAt}
-                  onValueChange={(recordedAt) =>
-                    setEvolutionForm((current) => ({
-                      ...current,
-                      recordedAt,
-                    }))
-                  }
-                />
-              </Field>
-              <Field label="Contenu">
-                <Textarea
-                  required
-                  className="min-h-72"
-                  value={evolutionForm.content}
-                  onChange={(event) =>
-                    setEvolutionForm((current) => ({
-                      ...current,
-                      content: event.target.value,
-                    }))
-                  }
-                />
-              </Field>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button
                   type="button"

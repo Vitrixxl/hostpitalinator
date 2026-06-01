@@ -63,14 +63,14 @@ export function LabPanelDialog({
           </DialogHeader>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Date de prelevement">
+            <Field label="Date de prelevement" required>
               <DateTimeTextInput
                 required
                 value={form.sampledAt}
                 onValueChange={(sampledAt) => onChange({ ...form, sampledAt })}
               />
             </Field>
-            <Field label="Type de bilan">
+            <Field label="Type de bilan" required>
               <Select
                 value={form.panelType}
                 onValueChange={(panelType) =>

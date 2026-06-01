@@ -43,15 +43,15 @@ export function emptyPatientForm(currentService = ""): PatientFormState {
 
 export function emptyVitalForm(): VitalFormState {
   return {
-    recordedAt: nowLocalInput(),
-    temperature: "37",
-    heartRate: "75",
-    systolicBloodPressure: "120",
-    diastolicBloodPressure: "75",
-    oxygenSaturation: "98",
-    weight: "70",
+    recordedAt: "",
+    temperature: "",
+    heartRate: "",
+    systolicBloodPressure: "",
+    diastolicBloodPressure: "",
+    oxygenSaturation: "",
+    weight: "",
     diuresis: "",
-    lastStoolDate: todayInput(),
+    lastStoolDate: "",
   }
 }
 
@@ -69,9 +69,12 @@ export function vitalRecordToForm(record: VitalRecord): VitalFormState {
   }
 }
 
-export function vitalFormToInput(form: VitalFormState) {
+export function vitalFormToInput(
+  form: VitalFormState,
+  recordedAt = form.recordedAt
+) {
   return {
-    recordedAt: form.recordedAt,
+    recordedAt,
     temperature: Number(form.temperature),
     heartRate: Number(form.heartRate),
     systolicBloodPressure: Number(form.systolicBloodPressure),

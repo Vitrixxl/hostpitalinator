@@ -126,7 +126,7 @@ export function AuthScreen({
 
             {mode === "login" ? (
               <form className="grid gap-4" onSubmit={handleLogin}>
-                <Field label="Courriel">
+                <Field label="Courriel" required>
                   <Input
                     type="email"
                     autoComplete="email"
@@ -140,7 +140,7 @@ export function AuthScreen({
                     }
                   />
                 </Field>
-                <Field label="Mot de passe">
+                <Field label="Mot de passe" required>
                   <Input
                     type="password"
                     autoComplete="current-password"
@@ -165,7 +165,7 @@ export function AuthScreen({
               </form>
             ) : (
               <form className="grid gap-4" onSubmit={handleBootstrap}>
-                <Field label="Nom">
+                <Field label="Nom" required>
                   <Input
                     required
                     value={bootstrapForm.name}
@@ -177,7 +177,7 @@ export function AuthScreen({
                     }
                   />
                 </Field>
-                <Field label="Courriel">
+                <Field label="Courriel" required>
                   <Input
                     type="email"
                     required
@@ -190,7 +190,7 @@ export function AuthScreen({
                     }
                   />
                 </Field>
-                <Field label="Service initial">
+                <Field label="Service initial" required>
                   <Input
                     required
                     value={bootstrapForm.service}

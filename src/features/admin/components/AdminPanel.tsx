@@ -475,7 +475,7 @@ export function AdminPanel({
             onSubmit={handleCreateService}
           >
             <SectionTitle icon={Plus} title="Nouveau service" />
-            <Field label="Nom">
+            <Field label="Nom" required>
               <Input
                 required
                 value={createServiceForm.name}
@@ -497,7 +497,7 @@ export function AdminPanel({
             <SectionTitle icon={Building2} title="Service selectionne" />
             {selectedService ? (
               <>
-                <Field label="Nom">
+                <Field label="Nom" required>
                   <Input
                     required
                     value={editServiceForm.name}
@@ -729,14 +729,14 @@ function AccountFields({
 }) {
   return (
     <>
-      <Field label="Nom">
+      <Field label="Nom" required>
         <Input
           required
           value={form.name}
           onChange={(event) => onChange({ ...form, name: event.target.value })}
         />
       </Field>
-      <Field label="Courriel">
+      <Field label="Courriel" required>
         <Input
           required
           type="email"
@@ -745,7 +745,7 @@ function AccountFields({
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Role">
+        <Field label="Role" required>
           <Select
             value={form.role}
             onValueChange={(role) => onChange({ ...form, role: role as UserRole })}
@@ -762,7 +762,7 @@ function AccountFields({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Service">
+        <Field label="Service" required>
           <ServiceSelect
             services={services}
             required
@@ -799,7 +799,7 @@ function BedFields({
 }) {
   return (
     <>
-      <Field label="Libelle">
+      <Field label="Libelle" required>
         <Input
           required
           value={form.label}
@@ -807,7 +807,7 @@ function BedFields({
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Service">
+        <Field label="Service" required>
           <ServiceSelect
             services={services}
             required

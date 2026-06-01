@@ -31,7 +31,7 @@ export function NumberField({
   required?: boolean
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} required={required}>
       <Input
         required={required}
         type="number"

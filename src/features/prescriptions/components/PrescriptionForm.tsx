@@ -82,14 +82,14 @@ export function PrescriptionForm({
       </DialogHeader>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Debut">
+        <Field label="Debut" required>
           <DateTextInput
             required
             value={form.startDate}
             onValueChange={(startDate) => onChange({ ...form, startDate })}
           />
         </Field>
-        <Field label="Statut">
+        <Field label="Statut" required>
           <Select
             value={form.status}
             onValueChange={(status) => onChange({ ...form, status })}
@@ -114,13 +114,13 @@ export function PrescriptionForm({
             key={index}
             className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_minmax(7rem,0.35fr)_minmax(9rem,0.45fr)_auto]"
           >
-            <Field label="Medicament">
+            <Field label="Medicament" required>
               <MedicineSearchInput
                 medication={medication}
                 onChange={(values) => updateMedication(index, values)}
               />
             </Field>
-            <Field label="Duree">
+            <Field label="Duree" required>
               <Input
                 required
                 min={1}
@@ -134,7 +134,7 @@ export function PrescriptionForm({
                 }
               />
             </Field>
-            <Field label="Unite">
+            <Field label="Unite" required>
               <Select
                 value={medication.durationUnit}
                 onValueChange={(durationUnit) =>
