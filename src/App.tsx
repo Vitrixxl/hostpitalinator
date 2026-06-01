@@ -219,13 +219,13 @@ type PrescriptionMedicationFormState = {
   dosage: string
   frequency: string
   route: string
+  durationValue: string
+  durationUnit: PrescriptionDurationUnit
 }
 
 type PrescriptionFormState = {
   medications: PrescriptionMedicationFormState[]
   startDate: string
-  durationValue: string
-  durationUnit: PrescriptionDurationUnit
   status: string
 }
 
@@ -1723,15 +1723,15 @@ function PatientWorkspace({
           throw new Error("Selectionnez un medicament reference pour chaque ligne")
         }
 
-        const prescriptionEndDate = prescriptionEndDateFromDuration(
-          prescriptionForm.startDate,
-          prescriptionForm.durationValue,
-          prescriptionForm.durationUnit
-        )
-
         await Promise.all(
-          medicationInputs.map((medication) =>
-            addPrescription(patientId, {
+          medicationInputs.map((medication) => {
+            const prescriptionEndDate = prescriptionEndDateFromDuration(
+              prescriptionForm.startDate,
+              medication.durationValue,
+              medication.durationUnit
+            )
+
+            return addPrescription(patientId, {
               medicineId: medication.medicineId,
               dosage: medication.dosage,
               frequency: medication.frequency,
@@ -1740,7 +1740,7 @@ function PatientWorkspace({
               endDate: prescriptionEndDate,
               status: prescriptionForm.status,
             })
-          )
+          })
         )
 
         setPrescriptionForm(emptyPrescriptionForm())
@@ -2981,47 +2981,13 @@ function PrescriptionForm({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Debut">
           <DateTextInput
             required
             value={form.startDate}
             onValueChange={(startDate) => onChange({ ...form, startDate })}
           />
-        </Field>
-        <Field label="Duree">
-          <Input
-            required
-            min={1}
-            step={1}
-            type="number"
-            value={form.durationValue}
-            onChange={(event) =>
-              onChange({ ...form, durationValue: event.target.value })
-            }
-          />
-        </Field>
-        <Field label="Unite">
-          <Select
-            value={form.durationUnit}
-            onValueChange={(durationUnit) =>
-              onChange({
-                ...form,
-                durationUnit: durationUnit as PrescriptionDurationUnit,
-              })
-            }
-          >
-            <SelectTrigger className="max-w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PRESCRIPTION_DURATION_UNITS.map((unit) => (
-                <SelectItem key={unit.value} value={unit.value}>
-                  {unit.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </Field>
         <Field label="Statut">
           <Select
@@ -3046,13 +3012,48 @@ function PrescriptionForm({
         {form.medications.map((medication, index) => (
           <div
             key={index}
-            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_auto]"
+            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_minmax(7rem,0.35fr)_minmax(9rem,0.45fr)_auto]"
           >
             <Field label="Medicament">
               <MedicineSearchInput
                 medication={medication}
                 onChange={(values) => updateMedication(index, values)}
               />
+            </Field>
+            <Field label="Duree">
+              <Input
+                required
+                min={1}
+                step={1}
+                type="number"
+                value={medication.durationValue}
+                onChange={(event) =>
+                  updateMedication(index, {
+                    durationValue: event.target.value,
+                  })
+                }
+              />
+            </Field>
+            <Field label="Unite">
+              <Select
+                value={medication.durationUnit}
+                onValueChange={(durationUnit) =>
+                  updateMedication(index, {
+                    durationUnit: durationUnit as PrescriptionDurationUnit,
+                  })
+                }
+              >
+                <SelectTrigger className="max-w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESCRIPTION_DURATION_UNITS.map((unit) => (
+                    <SelectItem key={unit.value} value={unit.value}>
+                      {unit.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <div className="flex items-end justify-end">
               <Button
@@ -5198,8 +5199,6 @@ function emptyPrescriptionForm(): PrescriptionFormState {
   return {
     medications: [emptyPrescriptionMedicationForm()],
     startDate: todayInput(),
-    durationValue: "",
-    durationUnit: "days",
     status: "active",
   }
 }
@@ -5258,6 +5257,8 @@ function emptyPrescriptionMedicationForm(): PrescriptionMedicationFormState {
     dosage: "",
     frequency: "",
     route: "",
+    durationValue: "",
+    durationUnit: "days",
   }
 }
 
@@ -5271,6 +5272,8 @@ function trimPrescriptionMedicationForm(
     dosage: medication.dosage.trim(),
     frequency: medication.frequency.trim(),
     route: medication.route.trim(),
+    durationValue: medication.durationValue.trim(),
+    durationUnit: medication.durationUnit,
   }
 }
 
