@@ -1157,7 +1157,8 @@ function PatientWorkspace({
   )
   const [selectedEvolutionNote, setSelectedEvolutionNote] =
     useState<EvolutionNote | null>(null)
-  const [evolutionDialogOpen, setEvolutionDialogOpen] = useState(false)
+  const [evolutionDraftOpen, setEvolutionDraftOpen] = useState(false)
+  const [hasEvolutionDraft, setHasEvolutionDraft] = useState(false)
   const [activeTab, setActiveTab] = useState<PatientTab>("summary")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -1882,17 +1883,19 @@ function PatientWorkspace({
         ...emptyEvolutionForm(currentAccount),
         service: patient?.currentService ?? current.service,
       }))
-      setEvolutionDialogOpen(false)
+      setHasEvolutionDraft(false)
+      setEvolutionDraftOpen(false)
       await loadWorkspace()
     }, "Note d'evolution ajoutee")
   }
 
-  function handleOpenEvolutionDialog() {
+  function handleStartEvolutionDraft() {
     setEvolutionForm((current) => ({
-      ...emptyEvolutionForm(currentAccount),
+      ...(hasEvolutionDraft ? current : emptyEvolutionForm(currentAccount)),
       service: patient?.currentService ?? current.service,
     }))
-    setEvolutionDialogOpen(true)
+    setHasEvolutionDraft(true)
+    setEvolutionDraftOpen(true)
   }
 
   if (loading && !patient) {
@@ -2772,157 +2775,183 @@ function PatientWorkspace({
           </section>
         </TabsContent>
 
-        <TabsContent value="evolution">
-          <section className="rounded-lg border bg-background p-4">
-            <SectionTitle icon={Activity} title="Evolution clinique" />
-            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
-              <button
-                type="button"
-                className="group grid aspect-square min-h-56 place-items-center rounded-lg border border-dashed bg-card p-4 text-primary shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                aria-label="Ajouter une nouvelle note"
-                onClick={handleOpenEvolutionDialog}
-              >
-                <Plus className="size-10" />
-              </button>
-              {notes.map((note) => (
-                <button
-                  key={note.id}
+        <TabsContent value="evolution" forceMount>
+          {evolutionDraftOpen ? (
+            <form
+              className="grid gap-4 rounded-lg border bg-background p-4"
+              onSubmit={handleAddEvolution}
+            >
+              <SectionTitle
+                icon={Activity}
+                title="Nouvelle note d'evolution"
+                action={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEvolutionDraftOpen(false)}
+                  >
+                    <FileText className="size-4" />
+                    Notes
+                  </Button>
+                }
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Field label="Service">
+                  <ServiceSelect
+                    services={services}
+                    required
+                    value={evolutionForm.service}
+                    onChange={(service) =>
+                      setEvolutionForm((current) => ({
+                        ...current,
+                        service,
+                      }))
+                    }
+                    disabled
+                  />
+                </Field>
+                <Field label="Passage">
+                  <Input
+                    required
+                    value={evolutionForm.visitId}
+                    onChange={(event) =>
+                      setEvolutionForm((current) => ({
+                        ...current,
+                        visitId: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+              <Field label="Date et heure">
+                <DateTimeTextInput
+                  required
+                  value={evolutionForm.recordedAt}
+                  onValueChange={(recordedAt) =>
+                    setEvolutionForm((current) => ({
+                      ...current,
+                      recordedAt,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Contenu">
+                <Textarea
+                  required
+                  className="min-h-72"
+                  value={evolutionForm.content}
+                  onChange={(event) =>
+                    setEvolutionForm((current) => ({
+                      ...current,
+                      content: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
                   type="button"
-                  className="group grid aspect-square min-h-56 content-start overflow-hidden rounded-lg border bg-card p-4 text-left text-sm shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  aria-label={`Ouvrir la note du ${formatShortDateTime(
-                    note.recordedAt
-                  )}`}
-                  onClick={() => setSelectedEvolutionNote(note)}
+                  variant="outline"
+                  onClick={() => setEvolutionDraftOpen(false)}
                 >
-                  <span className="text-4xl leading-none font-semibold text-foreground">
-                    {formatEvolutionNoteDay(note.recordedAt)}
-                  </span>
-                  <span className="mt-1 text-xs font-medium text-muted-foreground uppercase">
-                    {formatEvolutionNoteMonth(note.recordedAt)}
-                  </span>
-                  <span className="mt-2 truncate font-medium">
-                    {note.service} · Passage {note.visitId}
-                  </span>
-                  <span className="mt-1 truncate text-xs text-muted-foreground">
-                    {note.author} · {formatEvolutionNoteTime(note.recordedAt)}
-                  </span>
-                  <span className="mt-2 overflow-hidden leading-5 text-muted-foreground whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
-                    {note.content}
+                  <FileText className="size-4" />
+                  Retour aux notes
+                </Button>
+                <Button type="submit">
+                  <Plus className="size-4" />
+                  Ajouter
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <section className="rounded-lg border bg-background p-4">
+              <SectionTitle icon={Activity} title="Evolution clinique" />
+              <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
+                <button
+                  type="button"
+                  className="group grid aspect-square min-h-56 place-items-center rounded-lg border border-dashed bg-card p-4 text-center text-primary shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  aria-label={
+                    hasEvolutionDraft
+                      ? "Reprendre la note en cours"
+                      : "Ajouter une nouvelle note"
+                  }
+                  onClick={handleStartEvolutionDraft}
+                >
+                  <span className="grid place-items-center gap-2">
+                    {hasEvolutionDraft ? (
+                      <Pencil className="size-10" />
+                    ) : (
+                      <Plus className="size-10" />
+                    )}
+                    <span className="text-sm font-medium text-foreground">
+                      {hasEvolutionDraft ? "Reprendre" : "Nouvelle note"}
+                    </span>
+                    {hasEvolutionDraft && (
+                      <span className="text-xs text-muted-foreground">
+                        Brouillon en cours
+                      </span>
+                    )}
                   </span>
                 </button>
-              ))}
-            </div>
-            <Dialog
-              open={selectedEvolutionNote !== null}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setSelectedEvolutionNote(null)
-                }
-              }}
-            >
-              <DialogContent className="sm:max-w-2xl">
-                {selectedEvolutionNote && (
-                  <div className="grid gap-5">
-                    <DialogHeader>
-                      <DialogTitle>
-                        Note du{" "}
-                        {formatShortDateTime(selectedEvolutionNote.recordedAt)}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {selectedEvolutionNote.service} · Passage{" "}
-                        {selectedEvolutionNote.visitId} ·{" "}
-                        {selectedEvolutionNote.author}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="max-h-[60vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 leading-6 whitespace-pre-wrap">
-                      {selectedEvolutionNote.content}
+                {notes.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    className="group grid aspect-square min-h-56 content-start overflow-hidden rounded-lg border bg-card p-4 text-left text-sm shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    aria-label={`Ouvrir la note du ${formatShortDateTime(
+                      note.recordedAt
+                    )}`}
+                    onClick={() => setSelectedEvolutionNote(note)}
+                  >
+                    <span className="text-4xl leading-none font-semibold text-foreground">
+                      {formatEvolutionNoteDay(note.recordedAt)}
+                    </span>
+                    <span className="mt-1 text-xs font-medium text-muted-foreground uppercase">
+                      {formatEvolutionNoteMonth(note.recordedAt)}
+                    </span>
+                    <span className="mt-2 truncate font-medium">
+                      {note.service} · Passage {note.visitId}
+                    </span>
+                    <span className="mt-1 truncate text-xs text-muted-foreground">
+                      {note.author} · {formatEvolutionNoteTime(note.recordedAt)}
+                    </span>
+                    <span className="mt-2 overflow-hidden leading-5 text-muted-foreground whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
+                      {note.content}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <Dialog
+                open={selectedEvolutionNote !== null}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setSelectedEvolutionNote(null)
+                  }
+                }}
+              >
+                <DialogContent className="sm:max-w-2xl">
+                  {selectedEvolutionNote && (
+                    <div className="grid gap-5">
+                      <DialogHeader>
+                        <DialogTitle>
+                          Note du{" "}
+                          {formatShortDateTime(selectedEvolutionNote.recordedAt)}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {selectedEvolutionNote.service} · Passage{" "}
+                          {selectedEvolutionNote.visitId} ·{" "}
+                          {selectedEvolutionNote.author}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="max-h-[60vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 leading-6 whitespace-pre-wrap">
+                        {selectedEvolutionNote.content}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
-            <Dialog
-              open={evolutionDialogOpen}
-              onOpenChange={setEvolutionDialogOpen}
-            >
-              <DialogContent className="sm:max-w-xl">
-                <form className="grid gap-4" onSubmit={handleAddEvolution}>
-                  <DialogHeader>
-                    <DialogTitle>Nouvelle note</DialogTitle>
-                    <DialogDescription className="sr-only">
-                      Creation d'une note d'evolution
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Service">
-                      <ServiceSelect
-                        services={services}
-                        required
-                        value={evolutionForm.service}
-                        onChange={(service) =>
-                          setEvolutionForm((current) => ({
-                            ...current,
-                            service,
-                          }))
-                        }
-                        disabled
-                      />
-                    </Field>
-                    <Field label="Passage">
-                      <Input
-                        required
-                        value={evolutionForm.visitId}
-                        onChange={(event) =>
-                          setEvolutionForm((current) => ({
-                            ...current,
-                            visitId: event.target.value,
-                          }))
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <Field label="Date et heure">
-                    <DateTimeTextInput
-                      required
-                      value={evolutionForm.recordedAt}
-                      onValueChange={(recordedAt) =>
-                        setEvolutionForm((current) => ({
-                          ...current,
-                          recordedAt,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Contenu">
-                    <Textarea
-                      required
-                      className="min-h-44"
-                      value={evolutionForm.content}
-                      onChange={(event) =>
-                        setEvolutionForm((current) => ({
-                          ...current,
-                          content: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setEvolutionDialogOpen(false)}
-                    >
-                      Fermer
-                    </Button>
-                    <Button type="submit">
-                      <Plus className="size-4" />
-                      Ajouter
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </section>
+                  )}
+                </DialogContent>
+              </Dialog>
+            </section>
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -3103,7 +3132,8 @@ function MedicineSearchInput({
   const [results, setResults] = useState<Medicine[]>([])
   const [loading, setLoading] = useState(false)
   const [searchError, setSearchError] = useState("")
-  const popoverContainerRef = useRef<HTMLDivElement>(null)
+  const [popoverContainer, setPopoverContainer] =
+    useState<HTMLDivElement | null>(null)
   const query = medication.medicationQuery.trim()
   const selected = medication.medicineId !== ""
 
@@ -3178,7 +3208,7 @@ function MedicineSearchInput({
     open && !selected && query.length >= MEDICINE_QUERY_MIN_LENGTH
 
   return (
-    <div ref={popoverContainerRef} className="grid gap-1">
+    <div ref={setPopoverContainer} className="grid gap-1">
       <Popover open={showResults} onOpenChange={setOpen}>
         <PopoverAnchor asChild>
           <div className="relative">
@@ -3196,7 +3226,7 @@ function MedicineSearchInput({
         <PopoverContent
           align="start"
           className="w-[min(34rem,calc(100vw-2rem))] p-1"
-          container={popoverContainerRef.current ?? undefined}
+          container={popoverContainer ?? undefined}
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <div className="max-h-72 overflow-auto overscroll-contain">
