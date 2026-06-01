@@ -993,7 +993,7 @@ export function PatientWorkspace({
 
     window.setTimeout(() => {
       delete document.documentElement.dataset.patientTabDirection
-    }, 360)
+    }, 520)
   }
 
   const tabPanelClassName = cn(
