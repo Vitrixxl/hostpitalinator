@@ -84,6 +84,9 @@ import {
   logout,
   openMedicalDocument,
   resetAccountPassword,
+  setRealtimeContext,
+  subscribeRealtime,
+  type RealtimeEvent,
   updateAccount,
   updateBed,
   updatePatient,
@@ -1067,6 +1070,109 @@ function PatientWorkspace({
 
     return () => window.clearTimeout(timeout)
   }, [loadWorkspace])
+
+  const refreshPatient = useCallback(async () => {
+    try {
+      const patientResult = await getPatient(patientId)
+
+      setPatient(patientResult)
+      setPatientForm(patientToForm(patientResult))
+      onPatientChanged()
+    } catch (refreshError) {
+      setError(errorMessage(refreshError))
+    }
+  }, [onPatientChanged, patientId])
+
+  const refreshVitals = useCallback(async () => {
+    try {
+      const [latestVitalResult, vitalResults] = await Promise.all([
+        getLatestVitalRecord(patientId),
+        listVitalRecords(patientId),
+      ])
+
+      setLatestVital(latestVitalResult)
+      setVitals(vitalResults)
+    } catch (refreshError) {
+      setError(errorMessage(refreshError))
+    }
+  }, [patientId])
+
+  const refreshPrescriptions = useCallback(async () => {
+    try {
+      setPrescriptions(await listPrescriptions(patientId))
+    } catch (refreshError) {
+      setError(errorMessage(refreshError))
+    }
+  }, [patientId])
+
+  const refreshLabs = useCallback(async () => {
+    try {
+      setLabs(await listLabResults(patientId))
+    } catch (refreshError) {
+      setError(errorMessage(refreshError))
+    }
+  }, [patientId])
+
+  const refreshDocuments = useCallback(async () => {
+    try {
+      setDocuments(
+        await listMedicalDocuments(
+          patientId,
+          documentFilter === "all" ? {} : { category: documentFilter }
+        )
+      )
+    } catch (refreshError) {
+      setError(errorMessage(refreshError))
+    }
+  }, [documentFilter, patientId])
+
+  const refreshEvolutionNotes = useCallback(async () => {
+    try {
+      setNotes(await listEvolutionNotes(patientId))
+    } catch (refreshError) {
+      setError(errorMessage(refreshError))
+    }
+  }, [patientId])
+
+  const handleRealtimeEvent = useCallback(
+    (event: RealtimeEvent) => {
+      if (event.patientId !== patientId) {
+        return
+      }
+
+      if (event.entity === "patient") {
+        void refreshPatient()
+      } else if (event.entity === "vitalRecord") {
+        void refreshVitals()
+      } else if (event.entity === "prescription") {
+        void refreshPrescriptions()
+      } else if (event.entity === "labPanel") {
+        void refreshLabs()
+      } else if (event.entity === "medicalDocument") {
+        void refreshDocuments()
+      } else if (event.entity === "evolutionNote") {
+        void refreshEvolutionNotes()
+      }
+    },
+    [
+      patientId,
+      refreshDocuments,
+      refreshEvolutionNotes,
+      refreshLabs,
+      refreshPatient,
+      refreshPrescriptions,
+      refreshVitals,
+    ]
+  )
+
+  useEffect(() => {
+    setRealtimeContext({
+      patientId,
+      page: realtimePageForPatientTab(activeTab),
+    })
+
+    return subscribeRealtime(handleRealtimeEvent)
+  }, [activeTab, handleRealtimeEvent, patientId])
 
   const vitalChartData = useMemo(
     () =>
@@ -4682,6 +4788,10 @@ function todayInput() {
   const now = new Date()
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
   return now.toISOString().slice(0, 10)
+}
+
+function realtimePageForPatientTab(tab: PatientTab) {
+  return tab === "summary" ? "patient" : tab
 }
 
 function formatDate(value: string) {
