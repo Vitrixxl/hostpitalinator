@@ -140,6 +140,7 @@ async fn create_patient(app: &Router, token: &str) -> Value {
             "birthDate": "1815-12-10",
             "sex": "female",
             "address": "12 rue des Algorithmes, Paris",
+            "apartmentNumber": "B12",
             "phoneNumber": "01 23 45 67 89",
             "email": "ada.lovelace@example.test",
             "administrativeInfo": "Dossier initial",
@@ -462,6 +463,7 @@ async fn patients_can_be_created_and_listed() {
     assert_eq!(patient["firstName"], "Ada");
     assert_eq!(patient["sex"], "female");
     assert_eq!(patient["address"], "12 rue des Algorithmes, Paris");
+    assert_eq!(patient["apartmentNumber"], "B12");
     assert_eq!(patient["phoneNumber"], "01 23 45 67 89");
     assert_eq!(patient["email"], "ada.lovelace@example.test");
 

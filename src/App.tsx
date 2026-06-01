@@ -1,9 +1,7 @@
 import {
   type ChangeEvent,
-  type FocusEvent,
   type FormEvent,
   type KeyboardEvent,
-  type InputHTMLAttributes,
   useCallback,
   useEffect,
   useId,
@@ -187,6 +185,7 @@ type PatientFormState = {
   birthDate: string
   sex: string
   address: string
+  apartmentNumber: string
   phoneNumber: string
   email: string
   currentService: string
@@ -715,6 +714,7 @@ function AppShell({
         birthDate: patientForm.birthDate,
         sex: optionalValue(patientForm.sex) as PatientSex | undefined,
         address: optionalValue(patientForm.address),
+        apartmentNumber: optionalValue(patientForm.apartmentNumber),
         phoneNumber: optionalValue(patientForm.phoneNumber),
         email: optionalValue(patientForm.email),
         currentService: patientForm.currentService || account.service,
@@ -1028,10 +1028,11 @@ function PatientFormFields({
           />
         </Field>
         <Field label="Date de naissance">
-          <FrenchDateInput
+          <Input
             required
+            type="date"
             value={form.birthDate}
-            onValueChange={(birthDate) => updateField("birthDate", birthDate)}
+            onChange={(event) => updateField("birthDate", event.target.value)}
           />
         </Field>
         <Field label="Sexe">
@@ -1061,7 +1062,7 @@ function PatientFormFields({
             onChange={(bedId) => updateField("bedId", bedId)}
           />
         </Field>
-        <div className="md:col-span-2">
+        <div className="grid gap-3 md:col-span-2 md:grid-cols-[minmax(0,1fr)_11rem]">
           <div className="grid gap-1.5">
             <Label htmlFor={addressInputId}>Adresse</Label>
             <AddressAutocomplete
@@ -1071,6 +1072,15 @@ function PatientFormFields({
               onChange={(address) => updateField("address", address)}
             />
           </div>
+          <Field label="Appartement">
+            <Input
+              placeholder="Optionnel"
+              value={form.apartmentNumber}
+              onChange={(event) =>
+                updateField("apartmentNumber", event.target.value)
+              }
+            />
+          </Field>
         </div>
         <Field label="Telephone">
           <Input
@@ -1605,6 +1615,7 @@ function PatientWorkspace({
         birthDate: patientForm.birthDate,
         sex: nullableOptionalValue(patientForm.sex) as PatientSex | null,
         address: nullableOptionalValue(patientForm.address),
+        apartmentNumber: nullableOptionalValue(patientForm.apartmentNumber),
         phoneNumber: nullableOptionalValue(patientForm.phoneNumber),
         email: nullableOptionalValue(patientForm.email),
         currentService: patientForm.currentService,
@@ -2165,13 +2176,14 @@ function PatientWorkspace({
                     </DialogDescription>
                   </DialogHeader>
                   <Field label="Date et heure">
-                    <FrenchDateTimeInput
+                    <Input
                       required
+                      type="datetime-local"
                       value={vitalForm.recordedAt}
-                      onValueChange={(recordedAt) =>
+                      onChange={(event) =>
                         setVitalForm((current) => ({
                           ...current,
-                          recordedAt,
+                          recordedAt: event.target.value,
                         }))
                       }
                     />
@@ -2247,13 +2259,14 @@ function PatientWorkspace({
                     }
                   />
                   <Field label="Dernieres selles">
-                    <FrenchDateInput
+                    <Input
                       required
+                      type="date"
                       value={vitalForm.lastStoolDate}
-                      onValueChange={(lastStoolDate) =>
+                      onChange={(event) =>
                         setVitalForm((current) => ({
                           ...current,
-                          lastStoolDate,
+                          lastStoolDate: event.target.value,
                         }))
                       }
                     />
@@ -2334,25 +2347,27 @@ function PatientWorkspace({
                   />
                 </Field>
                 <Field label="Debut min">
-                  <FrenchDateInput
+                  <Input
                     className="w-40 max-w-full"
+                    type="date"
                     value={prescriptionFilters.startDateFrom}
-                    onValueChange={(startDateFrom) =>
+                    onChange={(event) =>
                       setPrescriptionFilters((current) => ({
                         ...current,
-                        startDateFrom,
+                        startDateFrom: event.target.value,
                       }))
                     }
                   />
                 </Field>
                 <Field label="Debut max">
-                  <FrenchDateInput
+                  <Input
                     className="w-40 max-w-full"
+                    type="date"
                     value={prescriptionFilters.startDateTo}
-                    onValueChange={(startDateTo) =>
+                    onChange={(event) =>
                       setPrescriptionFilters((current) => ({
                         ...current,
-                        startDateTo,
+                        startDateTo: event.target.value,
                       }))
                     }
                   />
@@ -2889,13 +2904,14 @@ function PatientWorkspace({
                     </Field>
                   </div>
                   <Field label="Date et heure">
-                    <FrenchDateTimeInput
+                    <Input
                       required
+                      type="datetime-local"
                       value={evolutionForm.recordedAt}
-                      onValueChange={(recordedAt) =>
+                      onChange={(event) =>
                         setEvolutionForm((current) => ({
                           ...current,
-                          recordedAt,
+                          recordedAt: event.target.value,
                         }))
                       }
                     />
@@ -2992,16 +3008,22 @@ function PrescriptionForm({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Debut">
-          <FrenchDateInput
+          <Input
             required
+            type="date"
             value={form.startDate}
-            onValueChange={(startDate) => onChange({ ...form, startDate })}
+            onChange={(event) =>
+              onChange({ ...form, startDate: event.target.value })
+            }
           />
         </Field>
         <Field label="Fin">
-          <FrenchDateInput
+          <Input
+            type="date"
             value={form.endDate}
-            onValueChange={(endDate) => onChange({ ...form, endDate })}
+            onChange={(event) =>
+              onChange({ ...form, endDate: event.target.value })
+            }
           />
         </Field>
         <Field label="Statut">
@@ -3134,10 +3156,13 @@ function LabPanelDialog({
 
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Date de prelevement">
-              <FrenchDateTimeInput
+              <Input
                 required
+                type="datetime-local"
                 value={form.sampledAt}
-                onValueChange={(sampledAt) => onChange({ ...form, sampledAt })}
+                onChange={(event) =>
+                  onChange({ ...form, sampledAt: event.target.value })
+                }
               />
             </Field>
             <Field label="Type de bilan">
@@ -4149,7 +4174,7 @@ function AddressAutocomplete({
     }
   }, [value])
 
-  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
     selectedValueRef.current = ""
     onChange(event.target.value)
   }
@@ -4163,7 +4188,7 @@ function AddressAutocomplete({
     setStatus("idle")
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (!open) {
       return
     }
@@ -4201,7 +4226,7 @@ function AddressAutocomplete({
 
   return (
     <div className="relative">
-      <Textarea
+      <Input
         id={id}
         required={required}
         role="combobox"
@@ -4211,7 +4236,6 @@ function AddressAutocomplete({
         aria-activedescendant={
           activeSuggestion ? `${suggestionListId}-${activeIndex}` : undefined
         }
-        className="min-h-20"
         value={value}
         onBlur={() => {
           inputFocusedRef.current = false
@@ -4280,168 +4304,6 @@ function AddressAutocomplete({
 
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError"
-}
-
-type FrenchDateInputProps = Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  "type" | "value" | "onChange"
-> & {
-  value: string
-  onValueChange: (value: string) => void
-}
-
-const FRENCH_DATE_INPUT_PATTERN = "\\d{1,2}/\\d{1,2}/\\d{4}"
-const FRENCH_DATE_TIME_INPUT_PATTERN =
-  "\\d{1,2}/\\d{1,2}/\\d{4} [0-2]?\\d[:h]\\d{1,2}"
-const FRENCH_DATE_INPUT_TITLE = "Format attendu : jj/mm/aaaa"
-const FRENCH_DATE_TIME_INPUT_TITLE = "Format attendu : jj/mm/aaaa hh:mm"
-
-function FrenchDateInput({
-  value,
-  onValueChange,
-  onBlur,
-  placeholder = "jj/mm/aaaa",
-  inputMode = "numeric",
-  ...props
-}: FrenchDateInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [draft, setDraft] = useState(() => ({
-    value,
-    displayValue: formatFrenchDateInputValue(value),
-  }))
-  const displayValue =
-    draft.value === value ? draft.displayValue : formatFrenchDateInputValue(value)
-
-  useEffect(() => {
-    inputRef.current?.setCustomValidity("")
-  }, [value])
-
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const nextValue = event.target.value
-    const parsedValue = parseFrenchDateInputValue(nextValue)
-
-    setDraft({
-      value: parsedValue ?? (nextValue.trim() === "" ? "" : value),
-      displayValue: nextValue,
-    })
-    event.target.setCustomValidity(
-      nextValue.trim() && parsedValue === null ? FRENCH_DATE_INPUT_TITLE : ""
-    )
-
-    if (parsedValue !== null || nextValue.trim() === "") {
-      onValueChange(parsedValue ?? "")
-    }
-  }
-
-  function handleBlur(event: FocusEvent<HTMLInputElement>) {
-    const parsedValue = parseFrenchDateInputValue(event.target.value)
-
-    if (parsedValue !== null) {
-      setDraft({
-        value: parsedValue,
-        displayValue: formatFrenchDateInputValue(parsedValue),
-      })
-      event.target.setCustomValidity("")
-    } else if (event.target.value.trim() === "") {
-      setDraft({ value: "", displayValue: "" })
-      event.target.setCustomValidity("")
-    } else {
-      event.target.setCustomValidity(FRENCH_DATE_INPUT_TITLE)
-    }
-
-    onBlur?.(event)
-  }
-
-  return (
-    <Input
-      {...props}
-      ref={inputRef}
-      type="text"
-      inputMode={inputMode}
-      pattern={FRENCH_DATE_INPUT_PATTERN}
-      placeholder={placeholder}
-      title={FRENCH_DATE_INPUT_TITLE}
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-    />
-  )
-}
-
-function FrenchDateTimeInput({
-  value,
-  onValueChange,
-  onBlur,
-  placeholder = "jj/mm/aaaa hh:mm",
-  inputMode = "numeric",
-  ...props
-}: FrenchDateInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [draft, setDraft] = useState(() => ({
-    value,
-    displayValue: formatFrenchDateTimeInputValue(value),
-  }))
-  const displayValue =
-    draft.value === value
-      ? draft.displayValue
-      : formatFrenchDateTimeInputValue(value)
-
-  useEffect(() => {
-    inputRef.current?.setCustomValidity("")
-  }, [value])
-
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const nextValue = event.target.value
-    const parsedValue = parseFrenchDateTimeInputValue(nextValue)
-
-    setDraft({
-      value: parsedValue ?? (nextValue.trim() === "" ? "" : value),
-      displayValue: nextValue,
-    })
-    event.target.setCustomValidity(
-      nextValue.trim() && parsedValue === null
-        ? FRENCH_DATE_TIME_INPUT_TITLE
-        : ""
-    )
-
-    if (parsedValue !== null || nextValue.trim() === "") {
-      onValueChange(parsedValue ?? "")
-    }
-  }
-
-  function handleBlur(event: FocusEvent<HTMLInputElement>) {
-    const parsedValue = parseFrenchDateTimeInputValue(event.target.value)
-
-    if (parsedValue !== null) {
-      setDraft({
-        value: parsedValue,
-        displayValue: formatFrenchDateTimeInputValue(parsedValue),
-      })
-      event.target.setCustomValidity("")
-    } else if (event.target.value.trim() === "") {
-      setDraft({ value: "", displayValue: "" })
-      event.target.setCustomValidity("")
-    } else {
-      event.target.setCustomValidity(FRENCH_DATE_TIME_INPUT_TITLE)
-    }
-
-    onBlur?.(event)
-  }
-
-  return (
-    <Input
-      {...props}
-      ref={inputRef}
-      type="text"
-      inputMode={inputMode}
-      pattern={FRENCH_DATE_TIME_INPUT_PATTERN}
-      placeholder={placeholder}
-      title={FRENCH_DATE_TIME_INPUT_TITLE}
-      value={displayValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-    />
-  )
 }
 
 function NumberField({
@@ -4914,6 +4776,7 @@ function emptyPatientForm(currentService = ""): PatientFormState {
     birthDate: "",
     sex: "",
     address: "",
+    apartmentNumber: "",
     phoneNumber: "",
     email: "",
     currentService,
@@ -5079,6 +4942,7 @@ function patientToForm(patient: Patient): PatientFormState {
     birthDate: patient.birthDate,
     sex: patient.sex ?? "",
     address: patient.address ?? "",
+    apartmentNumber: patient.apartmentNumber ?? "",
     phoneNumber: patient.phoneNumber ?? "",
     email: patient.email ?? "",
     currentService: patient.currentService,
@@ -5219,179 +5083,19 @@ function formatChartTooltipValue(value: unknown, unit: string, decimals: number)
   return unit ? `${formattedValue} ${unit}` : formattedValue
 }
 
-const ISO_DATE_INPUT_VALUE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
-const ISO_DATE_TIME_INPUT_VALUE_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
-const FRENCH_DATE_VALUE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
-const FRENCH_DATE_TIME_VALUE_PATTERN =
-  /^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T](\d{1,2})[:h](\d{1,2})$/
-
-function formatFrenchDateInputValue(value: string) {
-  const normalizedValue = normalizeDateInputValue(value)
-  const match = normalizedValue.match(ISO_DATE_INPUT_VALUE_PATTERN)
-
-  if (!match) {
-    return value
-  }
-
-  const [, year, month, day] = match
-  return `${day}/${month}/${year}`
-}
-
-function formatFrenchDateTimeInputValue(value: string) {
-  const normalizedValue = normalizeDateTimeInputValue(value)
-  const match = normalizedValue.match(ISO_DATE_TIME_INPUT_VALUE_PATTERN)
-
-  if (!match) {
-    return value
-  }
-
-  const [, year, month, day, hour, minute] = match
-  return `${day}/${month}/${year} ${hour}:${minute}`
-}
-
-function parseFrenchDateInputValue(value: string) {
-  const match = value.trim().match(FRENCH_DATE_VALUE_PATTERN)
-
-  if (!match) {
-    return null
-  }
-
-  const [, dayValue, monthValue, yearValue] = match
-  const day = Number(dayValue)
-  const month = Number(monthValue)
-  const year = Number(yearValue)
-
-  if (!isValidDateParts(year, month, day)) {
-    return null
-  }
-
-  return `${padDatePart(year, 4)}-${padDatePart(month)}-${padDatePart(day)}`
-}
-
-function parseFrenchDateTimeInputValue(value: string) {
-  const match = value.trim().match(FRENCH_DATE_TIME_VALUE_PATTERN)
-
-  if (!match) {
-    return null
-  }
-
-  const [, dayValue, monthValue, yearValue, hourValue, minuteValue] = match
-  const day = Number(dayValue)
-  const month = Number(monthValue)
-  const year = Number(yearValue)
-  const hour = Number(hourValue)
-  const minute = Number(minuteValue)
-
-  if (
-    !isValidDateParts(year, month, day) ||
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59
-  ) {
-    return null
-  }
-
-  return `${padDatePart(year, 4)}-${padDatePart(month)}-${padDatePart(
-    day
-  )}T${padDatePart(hour)}:${padDatePart(minute)}`
-}
-
-function normalizeDateInputValue(value: string) {
-  const trimmedValue = value.trim()
-
-  if (!trimmedValue) {
-    return ""
-  }
-
-  const isoMatch = trimmedValue.match(ISO_DATE_INPUT_VALUE_PATTERN)
-
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch
-    return isValidDateParts(Number(year), Number(month), Number(day))
-      ? trimmedValue
-      : value
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  return date.toISOString().slice(0, 10)
-}
-
-function normalizeDateTimeInputValue(value: string) {
-  const trimmedValue = value.trim()
-
-  if (!trimmedValue) {
-    return ""
-  }
-
-  const isoMatch = trimmedValue.match(ISO_DATE_TIME_INPUT_VALUE_PATTERN)
-
-  if (isoMatch) {
-    const [, year, month, day, hour, minute] = isoMatch
-    return isValidDateParts(Number(year), Number(month), Number(day)) &&
-      Number(hour) >= 0 &&
-      Number(hour) <= 23 &&
-      Number(minute) >= 0 &&
-      Number(minute) <= 59
-      ? `${year}-${month}-${day}T${hour}:${minute}`
-      : value
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  return date.toISOString().slice(0, 16)
-}
-
-function isValidDateParts(year: number, month: number, day: number) {
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day) ||
-    year < 1 ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return false
-  }
-
-  const date = new Date(0)
-  date.setFullYear(year, month - 1, day)
-  date.setHours(0, 0, 0, 0)
-
-  return (
-    date.getFullYear() === year &&
-    date.getMonth() === month - 1 &&
-    date.getDate() === day
-  )
-}
-
-function padDatePart(value: number, length = 2) {
-  return value.toString().padStart(length, "0")
-}
-
 function dateTimeLocalInput(value: string) {
   if (!value) {
     return nowLocalInput()
   }
 
-  const normalizedValue = normalizeDateTimeInputValue(value)
-  return normalizedValue.match(ISO_DATE_TIME_INPUT_VALUE_PATTERN)
-    ? normalizedValue
-    : value.slice(0, 16)
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 16)
+  }
+
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 16)
 }
 
 function dateInput(value: string) {
@@ -5399,10 +5103,14 @@ function dateInput(value: string) {
     return todayInput()
   }
 
-  const normalizedValue = normalizeDateInputValue(value)
-  return normalizedValue.match(ISO_DATE_INPUT_VALUE_PATTERN)
-    ? normalizedValue
-    : value.slice(0, 10)
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 10)
+  }
+
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 10)
 }
 
 function nowLocalInput() {

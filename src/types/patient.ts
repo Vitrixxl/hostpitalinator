@@ -7,6 +7,7 @@ export type Patient = {
   birthDate: string
   sex?: PatientSex | null
   address?: string | null
+  apartmentNumber?: string | null
   phoneNumber?: string | null
   email?: string | null
   administrativeInfo?: string | null

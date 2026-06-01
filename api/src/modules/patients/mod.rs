@@ -29,6 +29,7 @@ pub struct Patient {
     pub birth_date: String,
     pub sex: Option<String>,
     pub address: Option<String>,
+    pub apartment_number: Option<String>,
     pub phone_number: Option<String>,
     pub email: Option<String>,
     pub administrative_info: Option<String>,
@@ -47,6 +48,7 @@ pub struct CreatePatientRequest {
     birth_date: String,
     sex: Option<String>,
     address: Option<String>,
+    apartment_number: Option<String>,
     phone_number: Option<String>,
     email: Option<String>,
     administrative_info: Option<String>,
@@ -64,6 +66,8 @@ pub struct UpdatePatientRequest {
     sex: NullableStringField,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     address: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    apartment_number: NullableStringField,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     phone_number: NullableStringField,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
@@ -112,10 +116,12 @@ async fn list_patients(
               OR last_name LIKE ?
               OR email LIKE ?
               OR phone_number LIKE ?
-              OR address LIKE ?)
+              OR address LIKE ?
+              OR apartment_number LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -134,10 +140,12 @@ async fn list_patients(
                 OR last_name LIKE ?
                 OR email LIKE ?
                 OR phone_number LIKE ?
-                OR address LIKE ?)
+                OR address LIKE ?
+                OR apartment_number LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -156,11 +164,13 @@ async fn list_patients(
                 OR last_name LIKE ?
                 OR email LIKE ?
                 OR phone_number LIKE ?
-                OR address LIKE ?)
+                OR address LIKE ?
+                OR apartment_number LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
         .bind(&current_account.service)
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -180,11 +190,13 @@ async fn list_patients(
                 OR last_name LIKE ?
                 OR email LIKE ?
                 OR phone_number LIKE ?
-                OR address LIKE ?)
+                OR address LIKE ?
+                OR apartment_number LIKE ?)
             ORDER BY last_name ASC, first_name ASC
             "#,
         )
         .bind(&current_account.service)
+        .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
         .bind(&like_search)
@@ -217,6 +229,7 @@ async fn create_patient(
     let bed_id = payload.bed_id.and_then(normalize_optional);
     let sex = payload.sex.and_then(normalize_optional);
     let address = payload.address.and_then(normalize_optional);
+    let apartment_number = payload.apartment_number.and_then(normalize_optional);
     let phone_number = payload.phone_number.and_then(normalize_optional);
     let email = payload.email.and_then(normalize_optional);
     let bed_service = ensure_bed_assignable(&state, bed_id.as_deref(), None).await?;
@@ -232,10 +245,11 @@ async fn create_patient(
     let patient = sqlx::query_as::<_, Patient>(
         r#"
         INSERT INTO patients (
-          id, first_name, last_name, birth_date, sex, address, phone_number, email,
+          id, first_name, last_name, birth_date, sex, address, apartment_number,
+          phone_number, email,
           administrative_info, current_service, bed_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
@@ -245,6 +259,7 @@ async fn create_patient(
     .bind(payload.birth_date.trim())
     .bind(sex)
     .bind(address)
+    .bind(apartment_number)
     .bind(phone_number)
     .bind(email)
     .bind(payload.administrative_info.map(trim_optional))
@@ -284,6 +299,8 @@ async fn update_patient(
     let birth_date = payload.birth_date.unwrap_or(current.birth_date);
     let sex = merge_nullable_string_field(payload.sex, current.sex);
     let address = merge_nullable_string_field(payload.address, current.address);
+    let apartment_number =
+        merge_nullable_string_field(payload.apartment_number, current.apartment_number);
     let phone_number = merge_nullable_string_field(payload.phone_number, current.phone_number);
     let email = merge_nullable_string_field(payload.email, current.email);
     let administrative_info =
@@ -318,6 +335,7 @@ async fn update_patient(
             birth_date = ?,
             sex = ?,
             address = ?,
+            apartment_number = ?,
             phone_number = ?,
             email = ?,
             administrative_info = ?,
@@ -333,6 +351,7 @@ async fn update_patient(
     .bind(birth_date.trim())
     .bind(sex)
     .bind(address)
+    .bind(apartment_number)
     .bind(phone_number)
     .bind(email)
     .bind(administrative_info.map(trim_optional))

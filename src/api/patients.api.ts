@@ -10,6 +10,7 @@ export type CreatePatientInput = Pick<
       Patient,
       | "sex"
       | "address"
+      | "apartmentNumber"
       | "phoneNumber"
       | "email"
       | "administrativeInfo"
