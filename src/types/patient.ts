@@ -12,6 +12,8 @@ export type Patient = {
   email?: string | null
   administrativeInfo?: string | null
   currentService: string
+  currentVisitId?: string | null
+  currentVisitStartedAt?: string | null
   bedId?: string | null
   weight?: number | null
   height?: number | null

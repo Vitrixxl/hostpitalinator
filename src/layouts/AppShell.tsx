@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import {
   ArrowUpRight,
+  ArrowLeft,
   CalendarClock,
+  CalendarPlus,
+  Check,
   LogOut,
   Plus,
   RefreshCw,
@@ -26,6 +29,7 @@ import {
   listBeds,
   listPatients,
   listServices,
+  startNewPatientVisit,
 } from "@/api"
 import { ROLE_LABELS } from "@/app/constants"
 import { formatDate, formatShortDateTime } from "@/app/date-utils"
@@ -40,7 +44,16 @@ import type { PatientFormState } from "@/app/types"
 import { AlertMessage, EmptyState } from "@/components/common/Feedback"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -83,6 +96,13 @@ export function AppShell({
   const [patientForm, setPatientForm] = useState<PatientFormState>(
     emptyPatientForm(account.service)
   )
+  const [newVisitOpen, setNewVisitOpen] = useState(false)
+  const [newVisitPatients, setNewVisitPatients] = useState<Patient[]>([])
+  const [newVisitSearch, setNewVisitSearch] = useState("")
+  const [newVisitPatient, setNewVisitPatient] = useState<Patient | null>(null)
+  const [newVisitLoading, setNewVisitLoading] = useState(false)
+  const [newVisitSubmitting, setNewVisitSubmitting] = useState(false)
+  const [newVisitError, setNewVisitError] = useState("")
 
   const loadPatients = useCallback(async () => {
     setLoadingPatients(true)
@@ -118,6 +138,24 @@ export function AppShell({
     }
   }, [])
 
+  const loadNewVisitPatients = useCallback(async () => {
+    setNewVisitLoading(true)
+    setNewVisitError("")
+
+    try {
+      setNewVisitPatients(
+        await listPatients({
+          q: newVisitSearch,
+          includeArchived: true,
+        })
+      )
+    } catch (error) {
+      setNewVisitError(errorMessage(error))
+    } finally {
+      setNewVisitLoading(false)
+    }
+  }, [newVisitSearch])
+
   useEffect(() => {
     healthCheck()
       .then(() => setApiStatus("connectee"))
@@ -140,6 +178,18 @@ export function AppShell({
 
     return () => window.clearTimeout(timeout)
   }, [loadBeds, loadServices])
+
+  useEffect(() => {
+    if (!newVisitOpen) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      void loadNewVisitPatients()
+    }, 150)
+
+    return () => window.clearTimeout(timeout)
+  }, [loadNewVisitPatients, newVisitOpen])
 
   async function handleCreatePatient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -164,6 +214,36 @@ export function AppShell({
       navigate(`/patients/${created.id}/summary`)
     } catch (error) {
       setPatientError(errorMessage(error))
+    }
+  }
+
+  function handleNewVisitOpenChange(open: boolean) {
+    setNewVisitOpen(open)
+
+    if (!open) {
+      setNewVisitPatient(null)
+      setNewVisitSearch("")
+      setNewVisitError("")
+    }
+  }
+
+  async function handleConfirmNewVisit() {
+    if (!newVisitPatient) {
+      return
+    }
+
+    setNewVisitSubmitting(true)
+    setNewVisitError("")
+
+    try {
+      const patient = await startNewPatientVisit(newVisitPatient.id)
+      handleNewVisitOpenChange(false)
+      await Promise.all([loadPatients(), loadBeds()])
+      navigate(`/patients/${patient.id}/summary`)
+    } catch (error) {
+      setNewVisitError(errorMessage(error))
+    } finally {
+      setNewVisitSubmitting(false)
     }
   }
 
@@ -269,6 +349,7 @@ export function AppShell({
                   patients={patients}
                   search={search}
                   onCreatePatient={() => navigate("/patients/new")}
+                  onCreateVisit={() => setNewVisitOpen(true)}
                   onIncludeArchivedChange={setIncludeArchived}
                   onOpenPatient={(patientId) =>
                     navigate(`/patients/${patientId}/summary`)
@@ -284,8 +365,211 @@ export function AppShell({
             <Route path="*" element={<Navigate to="/patients" replace />} />
           </Routes>
         </section>
+        <NewVisitDialog
+          accountService={account.service}
+          beds={beds}
+          error={newVisitError}
+          loading={newVisitLoading}
+          open={newVisitOpen}
+          patients={newVisitPatients}
+          search={newVisitSearch}
+          selectedPatient={newVisitPatient}
+          submitting={newVisitSubmitting}
+          onBack={() => setNewVisitPatient(null)}
+          onConfirm={() => void handleConfirmNewVisit()}
+          onOpenChange={handleNewVisitOpenChange}
+          onRefresh={() => void loadNewVisitPatients()}
+          onSearchChange={setNewVisitSearch}
+          onSelectPatient={setNewVisitPatient}
+        />
       </div>
     </main>
+  )
+}
+
+function NewVisitDialog({
+  accountService,
+  beds,
+  error,
+  loading,
+  open,
+  patients,
+  search,
+  selectedPatient,
+  submitting,
+  onBack,
+  onConfirm,
+  onOpenChange,
+  onRefresh,
+  onSearchChange,
+  onSelectPatient,
+}: {
+  accountService: string
+  beds: Bed[]
+  error: string
+  loading: boolean
+  open: boolean
+  patients: Patient[]
+  search: string
+  selectedPatient: Patient | null
+  submitting: boolean
+  onBack: () => void
+  onConfirm: () => void
+  onOpenChange: (open: boolean) => void
+  onRefresh: () => void
+  onSearchChange: (search: string) => void
+  onSelectPatient: (patient: Patient) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        {selectedPatient ? (
+          <div className="grid gap-5">
+            <DialogHeader>
+              <DialogTitle>Confirmer la nouvelle entree</DialogTitle>
+              <DialogDescription>
+                Validez que ce patient commence une nouvelle entree dans votre
+                service.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-sm font-semibold text-primary">
+                  {patientInitials(selectedPatient)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">
+                    {selectedPatient.lastName} {selectedPatient.firstName}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Ne(e) le {formatDate(selectedPatient.birthDate)} ·{" "}
+                    {patientSexLabel(selectedPatient.sex)}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="secondary">
+                      Service actuel {selectedPatient.currentService}
+                    </Badge>
+                    <Badge>Nouvelle entree {accountService}</Badge>
+                    {selectedPatient.archivedAt && (
+                      <Badge variant="outline">Archive</Badge>
+                    )}
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Entree courante{" "}
+                    {selectedPatient.currentVisitId ?? "non renseignee"}
+                    {selectedPatient.currentVisitStartedAt
+                      ? ` · ${formatShortDateTime(
+                          selectedPatient.currentVisitStartedAt
+                        )}`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {error && <AlertMessage message={error} />}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submitting}
+                onClick={onBack}
+              >
+                <ArrowLeft className="size-4" />
+                Choisir un autre patient
+              </Button>
+              <Button type="button" disabled={submitting} onClick={onConfirm}>
+                <Check className="size-4" />
+                Confirmer
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="grid gap-5">
+            <DialogHeader>
+              <DialogTitle>Nouvelle visite</DialogTitle>
+              <DialogDescription>
+                Choisissez le patient. Le service de la nouvelle entree sera{" "}
+                {accountService}.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 min-w-0 flex-1 items-center rounded-full border border-input/60 bg-background shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+                <Search className="ml-3 size-4 shrink-0 text-muted-foreground" />
+                <Input
+                  className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                  placeholder="Rechercher un patient"
+                  value={search}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-lg"
+                disabled={loading}
+                onClick={onRefresh}
+                aria-label="Actualiser les patients"
+              >
+                <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+              </Button>
+            </div>
+
+            {error && <AlertMessage message={error} />}
+
+            <ScrollArea className="h-[24rem] rounded-xl border">
+              {patients.length > 0 ? (
+                <div className="divide-y">
+                  {patients.map((patient) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      className="grid w-full gap-2 bg-background px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      onClick={() => onSelectPatient(patient)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {patient.lastName} {patient.firstName}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Ne(e) le {formatDate(patient.birthDate)} ·{" "}
+                            {patientSexLabel(patient.sex)}
+                          </p>
+                        </div>
+                        <Badge variant={patient.archivedAt ? "outline" : "default"}>
+                          {patient.archivedAt ? "Archive" : "Actif"}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>Service {patient.currentService}</span>
+                        <span>Lit {bedLabel(beds, patient.bedId)}</span>
+                        <span>
+                          Entree {patient.currentVisitId ?? "non renseignee"}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4">
+                  <EmptyState
+                    label={
+                      loading
+                        ? "Chargement des patients"
+                        : "Aucun patient trouve"
+                    }
+                  />
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -297,6 +581,7 @@ function PatientDirectory({
   patients,
   search,
   onCreatePatient,
+  onCreateVisit,
   onIncludeArchivedChange,
   onOpenPatient,
   onRefresh,
@@ -309,6 +594,7 @@ function PatientDirectory({
   patients: Patient[]
   search: string
   onCreatePatient: () => void
+  onCreateVisit: () => void
   onIncludeArchivedChange: (includeArchived: boolean) => void
   onOpenPatient: (patientId: string) => void
   onRefresh: () => void
@@ -347,6 +633,10 @@ function PatientDirectory({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" onClick={onCreateVisit}>
+              <CalendarPlus className="size-4" />
+              Nouvelle visite
+            </Button>
             <Button type="button" onClick={onCreatePatient}>
               <Plus className="size-4" />
               Nouveau patient

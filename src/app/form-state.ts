@@ -238,13 +238,20 @@ export function emptyDocumentForm(): DocumentFormState {
   }
 }
 
-export function emptyEvolutionForm(account: Account): EvolutionFormState {
+export function emptyEvolutionForm(
+  account: Account,
+  visitId = defaultVisitId()
+): EvolutionFormState {
   return {
     service: account.service,
-    visitId: `VIS-${todayInput().replaceAll("-", "")}`,
+    visitId,
     recordedAt: nowLocalInput(),
     content: "",
   }
+}
+
+export function defaultVisitId() {
+  return `VIS-${todayInput().replaceAll("-", "")}`
 }
 
 export function emptyAccountForm(service = ""): AccountFormState {

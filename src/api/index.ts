@@ -56,6 +56,7 @@ export {
   createPatient,
   getPatient,
   listPatients,
+  startNewPatientVisit,
   updatePatient,
   type CreatePatientInput,
   type UpdatePatientInput,

@@ -4,6 +4,7 @@ import {
   Activity,
   Archive,
   ArrowLeft,
+  BedIcon,
   ClipboardList,
   Download,
   ExternalLink,
@@ -80,6 +81,7 @@ import {
 } from "@/app/form-state"
 import {
   bedLabel,
+  bedLabelText,
   formatFileSize,
   nullableOptionalValue,
   optionalValue,
@@ -252,6 +254,8 @@ export function PatientWorkspace({
   const [patientForm, setPatientForm] = useState<PatientFormState>(
     emptyPatientForm()
   )
+  const [placementDialogOpen, setPlacementDialogOpen] = useState(false)
+  const [placementBedId, setPlacementBedId] = useState("")
   const [vitalForm, setVitalForm] = useState<VitalFormState>(emptyVitalForm())
   const [editingVitalId, setEditingVitalId] = useState<string | null>(null)
   const [vitalDialogOpen, setVitalDialogOpen] = useState(false)
@@ -593,6 +597,28 @@ export function PatientWorkspace({
     [latestVital, vitalChartData]
   )
 
+  const assignablePlacementBeds = useMemo(() => {
+    if (!patient) {
+      return []
+    }
+
+    return beds
+      .filter((bed) => {
+        const isInScope =
+          currentAccount.role === "admin" || bed.service === patient.currentService
+        const isAvailable =
+          !bed.occupiedPatientId || bed.occupiedPatientId === patient.id
+
+        return isInScope && isAvailable
+      })
+      .sort(
+        (left, right) =>
+          left.service.localeCompare(right.service) ||
+          left.sortOrder - right.sortOrder ||
+          left.label.localeCompare(right.label)
+      )
+  }, [beds, currentAccount.role, patient])
+
   const filteredLabs = useMemo(() => {
     const activeMarkerFilters =
       labPanelFilter === "all"
@@ -723,6 +749,38 @@ export function PatientWorkspace({
       setPatientForm(patientToForm(updated))
       onPatientChanged()
     }, "Dossier patient enregistre")
+  }
+
+  function handleOpenPlacementDialog() {
+    setPlacementBedId(patient?.bedId ?? "")
+    setPlacementDialogOpen(true)
+  }
+
+  function handlePlacementDialogOpenChange(open: boolean) {
+    if (open) {
+      setPlacementBedId(patient?.bedId ?? "")
+    }
+
+    setPlacementDialogOpen(open)
+  }
+
+  async function handleAssignBed(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const nextBedId = nullableOptionalValue(placementBedId)
+    const nextBed =
+      nextBedId == null ? null : beds.find((bed) => bed.id === nextBedId)
+
+    await runAction(async () => {
+      const updated = await updatePatient(patientId, {
+        bedId: nextBedId,
+      })
+
+      setPatient(updated)
+      setPatientForm(patientToForm(updated))
+      setPlacementDialogOpen(false)
+      onPatientChanged()
+    }, nextBed ? `Patient place en ${bedLabelText(nextBed)}` : "Lit libere")
   }
 
   async function handleArchivePatient() {
@@ -965,7 +1023,7 @@ export function PatientWorkspace({
         content: evolutionForm.content,
       })
       setEvolutionForm((current) => ({
-        ...emptyEvolutionForm(currentAccount),
+        ...emptyEvolutionForm(currentAccount, patient?.currentVisitId ?? undefined),
         service: patient?.currentService ?? current.service,
       }))
       setHasEvolutionDraft(false)
@@ -976,7 +1034,9 @@ export function PatientWorkspace({
 
   function handleStartEvolutionDraft() {
     setEvolutionForm((current) => ({
-      ...(hasEvolutionDraft ? current : emptyEvolutionForm(currentAccount)),
+      ...(hasEvolutionDraft
+        ? current
+        : emptyEvolutionForm(currentAccount, patient?.currentVisitId ?? undefined)),
       service: patient?.currentService ?? current.service,
     }))
     setHasEvolutionDraft(true)
@@ -1018,10 +1078,23 @@ export function PatientWorkspace({
       <div className="rounded-3xl border bg-muted/20 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <h2 className="font-heading text-2xl font-medium">
-              {patient.lastName} {patient.firstName}
-            </h2>
-            <div className="mt-3 flex max-w-5xl flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <h2 className="font-heading text-2xl font-medium">
+                {patient.lastName} {patient.firstName}
+              </h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                disabled={Boolean(patient.archivedAt)}
+                onClick={handleOpenPlacementDialog}
+              >
+                <BedIcon className="size-4" />
+                Placer dans une chambre
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
               {patient.archivedAt ? (
                 <PatientInfoBadge>Archive</PatientInfoBadge>
               ) : (
@@ -1065,12 +1138,111 @@ export function PatientWorkspace({
         <AlertMessage tone="success" message={`Reference: ${documentOpenPath}`} />
       )}
 
+      <Dialog
+        open={placementDialogOpen}
+        onOpenChange={handlePlacementDialogOpenChange}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <form className="grid gap-4" onSubmit={handleAssignBed}>
+            <DialogHeader>
+              <DialogTitle>Placer dans une chambre</DialogTitle>
+              <DialogDescription>
+                {patient.lastName} {patient.firstName}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3">
+              <div className="rounded-3xl border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Lit actuel</p>
+                <p className="mt-1 font-medium">
+                  {bedLabel(beds, patient.bedId)}
+                </p>
+              </div>
+
+              <div className="max-h-[50vh] overflow-y-auto rounded-3xl border bg-background">
+                {assignablePlacementBeds.length > 0 ? (
+                  <div className="divide-y">
+                    {assignablePlacementBeds.map((bed) => {
+                      const selected = placementBedId === bed.id
+                      const isCurrentBed = bed.occupiedPatientId === patient.id
+
+                      return (
+                        <button
+                          key={bed.id}
+                          type="button"
+                          aria-pressed={selected}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                            selected && "bg-primary/10 text-primary"
+                          )}
+                          onClick={() => setPlacementBedId(bed.id)}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">
+                              Chambre {bed.label}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                              {bed.service}
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full border px-2 py-1 text-xs",
+                              selected
+                                ? "border-primary/30 bg-primary/10 text-primary"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            {isCurrentBed ? "Lit actuel" : "Disponible"}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4">
+                    <EmptyState label="Aucun lit disponible" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!patient.bedId && !placementBedId}
+                onClick={() => setPlacementBedId("")}
+              >
+                <BedIcon className="size-4" />
+                Liberer le lit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPlacementDialogOpen(false)}
+              >
+                <XCircle className="size-4" />
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                disabled={placementBedId === (patient.bedId ?? "")}
+              >
+                <Save className="size-4" />
+                Enregistrer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Tabs
         value={activeTab}
         onValueChange={handleTabChange}
         className="gap-4"
       >
-        <TabsList className="flex h-auto w-full flex-wrap justify-start rounded-3xl">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start rounded-3xl border border-border/70 bg-muted/50 shadow-sm">
           {PATIENT_TABS.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
               <tab.icon className="size-4" />
