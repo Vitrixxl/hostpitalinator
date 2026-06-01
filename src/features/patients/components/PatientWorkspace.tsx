@@ -13,6 +13,7 @@ import {
   FileUp,
   FlaskConical,
   Home,
+  LogOutIcon,
   Pencil,
   Plus,
   PlusIcon,
@@ -1279,7 +1280,7 @@ export function PatientWorkspace({
               disabled={!hasActiveVisit}
               onClick={() => setEndVisitDialogOpen(true)}
             >
-              <Home className="size-4" />
+              <LogOutIcon className="size-4" />
               Fin de visite
             </Button>
           </div>
