@@ -45,7 +45,8 @@ Variables utiles:
 Referentiel medicaments:
 
 - `GET /medicines?search=doliprane`: recherche les specialites commercialisees du referentiel local BDPM.
-- `bun run medicines:import`: telecharge `CIS_bdpm.txt` et `CIS_COMPO_bdpm.txt` depuis la BDPM officielle et met a jour la table `medicines`.
+- Les migrations embarquent un snapshot BDPM pour qu'une base fraiche soit directement utilisable.
+- `bun run medicines:import`: telecharge `CIS_bdpm.txt` et `CIS_COMPO_bdpm.txt` depuis la BDPM officielle et rafraichit la table `medicines`.
 
 Routes publiques minimales:
 

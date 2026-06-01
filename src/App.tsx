@@ -3187,6 +3187,7 @@ function MedicineSearchInput({
       dosage: "",
       route: "",
     })
+    setLoading(hasSearchLength)
     setOpen(hasSearchLength)
   }
 
