@@ -1910,7 +1910,7 @@ function PatientWorkspace({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 rounded-lg border bg-muted/20 p-4 xl:flex-row xl:items-center xl:justify-between">
+      <div className="flex flex-col gap-4 rounded-lg border bg-muted/20 p-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-heading text-2xl font-medium">
@@ -1930,7 +1930,7 @@ function PatientWorkspace({
             {patient.email && <PatientInfoBadge>{patient.email}</PatientInfoBadge>}
           </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-5">
           <MetricTile label="Sexe" value={patientSexLabel(patient.sex)} />
           <MetricTile label="Lit" value={bedLabel(beds, patient.bedId)} />
           <MetricTile
