@@ -227,6 +227,27 @@ async fn protected_endpoints_require_login() {
 }
 
 #[tokio::test]
+async fn medicines_search_matches_separate_normalized_words() {
+    let context = test_context().await;
+
+    let (status, medicines) = request_json(
+        &context.app,
+        Method::GET,
+        "/medicines?search=Dolipran%20comprim",
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{medicines}");
+    assert!(medicines
+        .as_array()
+        .expect("medicines list")
+        .iter()
+        .any(|medicine| medicine["id"] == "66567738"));
+}
+
+#[tokio::test]
 async fn frontend_build_is_served_without_auth() {
     let temp_dir = tempfile::tempdir().expect("create temporary api data directory");
     let web_dist_dir = temp_dir.path().join("dist");

@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, QueryBuilder, Sqlite};
 
 use crate::{error::ApiResult, state::AppState};
 
@@ -59,10 +59,11 @@ async fn search_medicines(
         .limit
         .unwrap_or(DEFAULT_SEARCH_LIMIT)
         .clamp(1, MAX_SEARCH_LIMIT);
-    let contains_pattern = format!("%{search}%");
-    let prefix_pattern = format!("{search}%");
+    let search_terms = search.split_whitespace().collect::<Vec<_>>();
+    let phrase_prefix_pattern = format!("{search}%");
+    let first_term_prefix_pattern = format!("{}%", search_terms[0]);
 
-    let medicines = sqlx::query_as::<_, Medicine>(
+    let mut query_builder = QueryBuilder::<Sqlite>::new(
         r#"
         SELECT
           id,
@@ -82,20 +83,40 @@ async fn search_medicines(
           created_at,
           updated_at
         FROM medicines
-        WHERE marketing_status = ?
-          AND search_text LIKE ?
-        ORDER BY
-          CASE WHEN search_text LIKE ? THEN 0 ELSE 1 END,
-          name COLLATE NOCASE
-        LIMIT ?
+        WHERE marketing_status =
         "#,
-    )
-    .bind(COMMERCIALIZED_STATUS)
-    .bind(contains_pattern)
-    .bind(prefix_pattern)
-    .bind(limit)
-    .fetch_all(&state.pool)
-    .await?;
+    );
+
+    query_builder.push_bind(COMMERCIALIZED_STATUS);
+
+    for term in search_terms {
+        query_builder.push(" AND (search_text LIKE ");
+        query_builder.push_bind(format!("{term}%"));
+        query_builder.push(" OR search_text LIKE ");
+        query_builder.push_bind(format!("% {term}%"));
+        query_builder.push(")");
+    }
+
+    query_builder.push(
+        r#"
+        ORDER BY
+          CASE
+            WHEN search_text LIKE "#,
+    );
+    query_builder.push_bind(phrase_prefix_pattern);
+    query_builder.push(" THEN 0 WHEN search_text LIKE ");
+    query_builder.push_bind(first_term_prefix_pattern);
+    query_builder.push(
+        r#" THEN 1 ELSE 2 END,
+          name COLLATE NOCASE
+        LIMIT "#,
+    );
+    query_builder.push_bind(limit);
+
+    let medicines = query_builder
+        .build_query_as::<Medicine>()
+        .fetch_all(&state.pool)
+        .await?;
 
     Ok(Json(medicines))
 }
