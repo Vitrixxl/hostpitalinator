@@ -366,7 +366,7 @@ function PatientDirectory({
         </div>
 
         <div className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="flex h-14 items-center rounded-full border border-input/60 bg-background/80 shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+          <div className="flex h-11 items-center rounded-full border border-input/60 bg-background/80 shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
             <Search className="ml-4 size-5 shrink-0 text-muted-foreground" />
             <Input
               className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-base shadow-none focus-visible:ring-0 md:text-base"
@@ -378,32 +378,15 @@ function PatientDirectory({
 
           <button
             type="button"
-            role="switch"
-            aria-checked={includeArchived}
+            aria-pressed={includeArchived}
             className={cn(
-              "flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              "flex h-11 shrink-0 items-center rounded-full border px-4 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               includeArchived
                 ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                 : "border-input bg-background/70 text-muted-foreground hover:bg-muted/50"
             )}
             onClick={() => onIncludeArchivedChange(!includeArchived)}
           >
-            <span
-              className={cn(
-                "flex h-5 w-9 items-center rounded-full border p-0.5 transition-colors",
-                includeArchived
-                  ? "border-primary-foreground/30 bg-primary-foreground/25"
-                  : "border-border bg-muted/40"
-              )}
-              aria-hidden="true"
-            >
-              <span
-                className={cn(
-                  "size-4 rounded-full bg-background shadow-sm transition-transform",
-                  includeArchived && "translate-x-4"
-                )}
-              />
-            </span>
             Inclure archives
           </button>
         </div>
