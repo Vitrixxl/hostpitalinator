@@ -366,10 +366,10 @@ function PatientDirectory({
         </div>
 
         <div className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex h-14 items-center rounded-full border border-input/60 bg-background/80 shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+            <Search className="ml-4 size-5 shrink-0 text-muted-foreground" />
             <Input
-              className="h-14 rounded-full border-input/60 bg-background/80 pl-12 pr-4 text-base shadow-inner shadow-muted/60 focus-visible:ring-primary/20 md:text-base"
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-base shadow-none focus-visible:ring-0 md:text-base"
               placeholder="Rechercher par nom ou prenom"
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
