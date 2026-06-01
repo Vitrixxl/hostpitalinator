@@ -11,6 +11,7 @@ import {
   FileText,
   FileUp,
   FlaskConical,
+  Home,
   Pencil,
   Plus,
   Save,
@@ -31,6 +32,7 @@ import {
   archivePatient,
   deleteVitalRecord,
   downloadMedicalDocument,
+  endPatientVisit,
   getLatestVitalRecord,
   getPatient,
   listEvolutionNotes,
@@ -783,6 +785,17 @@ export function PatientWorkspace({
     }, nextBed ? `Patient place en ${bedLabelText(nextBed)}` : "Lit libere")
   }
 
+  async function handleEndVisit() {
+    await runAction(async () => {
+      const updated = await endPatientVisit(patientId)
+      setPatient(updated)
+      setPatientForm(patientToForm(updated))
+      setPlacementBedId("")
+      setPlacementDialogOpen(false)
+      onPatientChanged()
+    }, "Visite terminee")
+  }
+
   async function handleArchivePatient() {
     await runAction(async () => {
       const archived = await archivePatient(patientId)
@@ -1073,6 +1086,8 @@ export function PatientWorkspace({
     )
   }
 
+  const hasActiveVisit = Boolean(patient.currentVisitId)
+
   return (
     <div className="space-y-5">
       <div className="rounded-3xl border bg-muted/20 p-4">
@@ -1082,17 +1097,32 @@ export function PatientWorkspace({
               <h2 className="font-heading text-2xl font-medium">
                 {patient.lastName} {patient.firstName}
               </h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-fit"
-                disabled={Boolean(patient.archivedAt)}
-                onClick={handleOpenPlacementDialog}
-              >
-                <BedIcon className="size-4" />
-                Placer dans une chambre
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {hasActiveVisit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                    disabled={Boolean(patient.archivedAt)}
+                    onClick={handleOpenPlacementDialog}
+                  >
+                    <BedIcon className="size-4" />
+                    Ajouter a une chambre
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={!hasActiveVisit}
+                  onClick={() => void handleEndVisit()}
+                >
+                  <Home className="size-4" />
+                  Fin de visite
+                </Button>
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {patient.archivedAt ? (
@@ -1100,6 +1130,11 @@ export function PatientWorkspace({
               ) : (
                 <PatientInfoBadge>Actif</PatientInfoBadge>
               )}
+              <PatientInfoBadge>
+                {hasActiveVisit
+                  ? `Visite ${patient.currentVisitId}`
+                  : "Aucune visite en cours"}
+              </PatientInfoBadge>
               <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
               {patient.phoneNumber && (
                 <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
@@ -1145,7 +1180,7 @@ export function PatientWorkspace({
         <DialogContent className="sm:max-w-2xl">
           <form className="grid gap-4" onSubmit={handleAssignBed}>
             <DialogHeader>
-              <DialogTitle>Placer dans une chambre</DialogTitle>
+              <DialogTitle>Ajouter a une chambre</DialogTitle>
               <DialogDescription>
                 {patient.lastName} {patient.firstName}
               </DialogDescription>
@@ -1275,6 +1310,7 @@ export function PatientWorkspace({
                 beds={beds}
                 currentPatientId={patient.id}
                 form={patientForm}
+                showBedField={false}
                 services={services}
                 onChange={setPatientForm}
               />

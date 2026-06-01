@@ -15,6 +15,7 @@ export function PatientFormFields({
   beds,
   currentPatientId,
   form,
+  showBedField = true,
   services,
   onChange,
 }: {
@@ -23,6 +24,7 @@ export function PatientFormFields({
   beds: Bed[]
   currentPatientId?: string
   form: PatientFormState
+  showBedField?: boolean
   services: Service[]
   onChange: (form: PatientFormState) => void
 }) {
@@ -74,15 +76,17 @@ export function PatientFormFields({
             disabled={account.role !== "admin"}
           />
         </Field>
-        <Field label="Lit">
-          <BedSelect
-            beds={beds}
-            service={form.currentService || account.service}
-            currentPatientId={currentPatientId}
-            value={form.bedId}
-            onChange={(bedId) => updateField("bedId", bedId)}
-          />
-        </Field>
+        {showBedField && (
+          <Field label="Lit">
+            <BedSelect
+              beds={beds}
+              service={form.currentService || account.service}
+              currentPatientId={currentPatientId}
+              value={form.bedId}
+              onChange={(bedId) => updateField("bedId", bedId)}
+            />
+          </Field>
+        )}
         <div className="grid gap-3 md:col-span-2 md:grid-cols-[minmax(0,1fr)_11rem]">
           <Field label="Adresse" required={administrativeRequired}>
             <AddressAutocomplete

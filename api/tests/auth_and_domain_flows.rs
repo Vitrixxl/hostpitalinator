@@ -590,6 +590,93 @@ async fn beds_can_be_listed_assigned_and_released() {
 }
 
 #[tokio::test]
+async fn patient_visit_can_be_ended_and_restarted_for_room_assignment() {
+    let context = test_context().await;
+
+    let (beds_status, beds) = request_json(
+        &context.app,
+        Method::GET,
+        "/beds",
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(beds_status, StatusCode::OK, "{beds}");
+
+    let first_bed = beds[0]["id"].as_str().expect("first bed id");
+    let second_bed = beds[1]["id"].as_str().expect("second bed id");
+
+    let (create_status, patient) = request_json(
+        &context.app,
+        Method::POST,
+        "/patients",
+        Some(&context.admin_token),
+        Some(json!({
+            "firstName": "Katherine",
+            "lastName": "Johnson",
+            "birthDate": "1918-08-26",
+            "bedId": first_bed
+        })),
+    )
+    .await;
+    assert_eq!(create_status, StatusCode::OK, "{patient}");
+    assert_eq!(patient["bedId"], first_bed);
+    assert!(patient["currentVisitId"].as_str().is_some());
+    assert!(patient["currentVisitStartedAt"].as_str().is_some());
+
+    let patient_id = patient["id"].as_str().expect("patient id");
+
+    let (end_status, ended_patient) = request_json(
+        &context.app,
+        Method::PATCH,
+        format!("/patients/{patient_id}/end-visit"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(end_status, StatusCode::OK, "{ended_patient}");
+    assert!(ended_patient["bedId"].is_null());
+    assert!(ended_patient["currentVisitId"].is_null());
+    assert!(ended_patient["currentVisitStartedAt"].is_null());
+
+    let (blocked_status, blocked_body) = request_json(
+        &context.app,
+        Method::PUT,
+        format!("/patients/{patient_id}"),
+        Some(&context.admin_token),
+        Some(json!({ "bedId": second_bed })),
+    )
+    .await;
+    assert_eq!(blocked_status, StatusCode::BAD_REQUEST);
+    assert_eq!(blocked_body["error"]["code"], "bad_request");
+
+    let (new_visit_status, new_visit_patient) = request_json(
+        &context.app,
+        Method::PATCH,
+        format!("/patients/{patient_id}/new-visit"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(new_visit_status, StatusCode::OK, "{new_visit_patient}");
+    assert!(new_visit_patient["currentVisitId"].as_str().is_some());
+    assert!(new_visit_patient["currentVisitStartedAt"]
+        .as_str()
+        .is_some());
+
+    let (assign_status, assigned_patient) = request_json(
+        &context.app,
+        Method::PUT,
+        format!("/patients/{patient_id}"),
+        Some(&context.admin_token),
+        Some(json!({ "bedId": second_bed })),
+    )
+    .await;
+    assert_eq!(assign_status, StatusCode::OK, "{assigned_patient}");
+    assert_eq!(assigned_patient["bedId"], second_bed);
+}
+
+#[tokio::test]
 async fn vital_records_can_be_added_listed_and_return_latest() {
     let context = test_context().await;
     let patient = create_patient(&context.app, &context.admin_token).await;

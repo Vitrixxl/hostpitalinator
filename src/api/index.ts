@@ -54,6 +54,7 @@ export { searchMedicines } from "@/api/medicines.api"
 export {
   archivePatient,
   createPatient,
+  endPatientVisit,
   getPatient,
   listPatients,
   startNewPatientVisit,

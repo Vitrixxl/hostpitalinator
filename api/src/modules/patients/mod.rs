@@ -115,6 +115,7 @@ pub fn routes() -> Router<AppState> {
         .route("/patients", get(list_patients).post(create_patient))
         .route("/patients/{id}", get(get_patient).put(update_patient))
         .route("/patients/{id}/archive", patch(archive_patient))
+        .route("/patients/{id}/end-visit", patch(end_visit))
         .route("/patients/{id}/new-visit", patch(start_new_visit))
 }
 
@@ -320,6 +321,17 @@ async fn update_patient(
     let requested_bed = payload.bed_id;
     let should_infer_service_from_bed =
         matches!(&requested_bed, NullableStringField::Present(Some(_)));
+    let requests_bed_assignment = matches!(
+        &requested_bed,
+        NullableStringField::Present(Some(value)) if !value.trim().is_empty()
+    );
+
+    if requests_bed_assignment && current.current_visit_id.is_none() {
+        return Err(ApiError::bad_request(
+            "Cannot assign a bed without an active visit",
+        ));
+    }
+
     let first_name = payload.first_name.unwrap_or(current.first_name);
     let last_name = payload.last_name.unwrap_or(current.last_name);
     let birth_date = payload.birth_date.unwrap_or(current.birth_date);
@@ -464,6 +476,42 @@ async fn start_new_visit(
     )
     .bind(&visit_service)
     .bind(&visit_service)
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("Patient not found"))?;
+
+    publish_change(
+        &state,
+        "patient",
+        "updated",
+        patient.id.clone(),
+        Some(patient.id.clone()),
+        ["patients", "patient"],
+        &patient,
+    );
+
+    Ok(Json(patient))
+}
+
+async fn end_visit(
+    State(state): State<AppState>,
+    Extension(current_account): Extension<CurrentAccount>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Patient>> {
+    require_patient_scope(&state, &id, &current_account).await?;
+
+    let patient = sqlx::query_as::<_, Patient>(
+        r#"
+        UPDATE patients
+        SET current_visit_id = NULL,
+            current_visit_started_at = NULL,
+            bed_id = NULL,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE id = ?
+        RETURNING *
+        "#,
+    )
     .bind(id)
     .fetch_optional(&state.pool)
     .await?

@@ -64,6 +64,12 @@ export function startNewPatientVisit(patientId: string) {
   })
 }
 
+export function endPatientVisit(patientId: string) {
+  return callApi<Patient>(`/patients/${patientId}/end-visit`, {
+    method: "PATCH",
+  })
+}
+
 export function archivePatient(patientId: string) {
   return callApi<Patient>(`/patients/${patientId}/archive`, {
     method: "PATCH",
