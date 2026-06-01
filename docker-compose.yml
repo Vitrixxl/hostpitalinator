@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+    ports:
+      - "${APP_PORT:-4000}:4000"
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+      DATABASE_URL: sqlite:///data/hospitalinator.sqlite
+      FILE_STORAGE_DIR: /data/documents
+      WEB_DIST_DIR: /app/public
+    volumes:
+      - hospitalinator-data:/data
+    restart: unless-stopped
+
+volumes:
+  hospitalinator-data:

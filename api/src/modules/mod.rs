@@ -1,0 +1,10 @@
+pub mod accounts;
+pub mod auth;
+pub mod beds;
+pub mod documents;
+pub mod evolutions;
+pub mod labs;
+pub mod patients;
+pub mod prescriptions;
+pub mod services;
+pub mod vitals;
