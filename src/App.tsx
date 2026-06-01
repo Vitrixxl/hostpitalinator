@@ -224,14 +224,15 @@ type PrescriptionMedicationFormState = {
 type PrescriptionFormState = {
   medications: PrescriptionMedicationFormState[]
   startDate: string
-  endDate: string
+  durationValue: string
+  durationUnit: PrescriptionDurationUnit
   status: string
 }
 
+type PrescriptionDurationUnit = "days" | "weeks" | "months" | "years"
+
 type PrescriptionFilters = {
   medication: string
-  prescriber: string
-  route: string
   startDateFrom: string
   startDateTo: string
 }
@@ -367,6 +368,15 @@ const PRESCRIPTION_STATUS_LABELS: Record<string, string> = {
 }
 
 const PRESCRIPTION_STATUSES = Object.keys(PRESCRIPTION_STATUS_LABELS)
+const PRESCRIPTION_DURATION_UNITS: Array<{
+  value: PrescriptionDurationUnit
+  label: string
+}> = [
+  { value: "days", label: "Jours" },
+  { value: "weeks", label: "Semaines" },
+  { value: "months", label: "Mois" },
+  { value: "years", label: "Annees" },
+]
 const UNASSIGNED_BED_VALUE = "__unassigned__"
 const UNSELECTED_SERVICE_VALUE = "__service_unselected__"
 const ADDRESS_QUERY_MIN_LENGTH = 3
@@ -1566,14 +1576,6 @@ function PatientWorkspace({
           return false
         }
 
-        if (!textIncludes(prescription.prescriber, prescriptionFilters.prescriber)) {
-          return false
-        }
-
-        if (!textIncludes(prescription.route, prescriptionFilters.route)) {
-          return false
-        }
-
         const prescriptionStartDate = dateInput(prescription.startDate)
 
         if (
@@ -1717,17 +1719,15 @@ function PatientWorkspace({
           trimPrescriptionMedicationForm
         )
 
-        if (
-          medicationInputs.some(
-            (medication) =>
-              !medication.medicineId ||
-              !medication.dosage ||
-              !medication.frequency ||
-              !medication.route
-          )
-        ) {
+        if (medicationInputs.some((medication) => !medication.medicineId)) {
           throw new Error("Selectionnez un medicament reference pour chaque ligne")
         }
+
+        const prescriptionEndDate = prescriptionEndDateFromDuration(
+          prescriptionForm.startDate,
+          prescriptionForm.durationValue,
+          prescriptionForm.durationUnit
+        )
 
         await Promise.all(
           medicationInputs.map((medication) =>
@@ -1737,7 +1737,7 @@ function PatientWorkspace({
               frequency: medication.frequency,
               route: medication.route,
               startDate: prescriptionForm.startDate,
-              endDate: optionalValue(prescriptionForm.endDate),
+              endDate: prescriptionEndDate,
               status: prescriptionForm.status,
             })
           )
@@ -2331,30 +2331,6 @@ function PatientWorkspace({
                     }
                   />
                 </Field>
-                <Field label="Prescripteur">
-                  <Input
-                    className="w-52 max-w-full"
-                    value={prescriptionFilters.prescriber}
-                    onChange={(event) =>
-                      setPrescriptionFilters((current) => ({
-                        ...current,
-                        prescriber: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Voie">
-                  <Input
-                    className="w-36 max-w-full"
-                    value={prescriptionFilters.route}
-                    onChange={(event) =>
-                      setPrescriptionFilters((current) => ({
-                        ...current,
-                        route: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
                 <Field label="Debut min">
                   <DateTextInput
                     className="w-40 max-w-full"
@@ -2397,11 +2373,8 @@ function PatientWorkspace({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Medicament</TableHead>
-                      <TableHead>Dose</TableHead>
-                      <TableHead>Frequence</TableHead>
-                      <TableHead>Voie</TableHead>
                       <TableHead>Debut</TableHead>
-                      <TableHead>Prescripteur</TableHead>
+                      <TableHead>Fin</TableHead>
                       <TableHead>Statut</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2409,13 +2382,12 @@ function PatientWorkspace({
                     {filteredPrescriptions.map((prescription) => (
                       <TableRow key={prescription.id}>
                         <TableCell>{prescription.medication}</TableCell>
-                        <TableCell>{prescription.dosage}</TableCell>
-                        <TableCell>{prescription.frequency}</TableCell>
-                        <TableCell>{prescription.route}</TableCell>
                         <TableCell>
                           {formatDate(prescription.startDate)}
                         </TableCell>
-                        <TableCell>{prescription.prescriber}</TableCell>
+                        <TableCell>
+                          {formatDate(prescription.endDate ?? "")}
+                        </TableCell>
                         <TableCell>
                           <Select
                             value={prescription.status}
@@ -2458,7 +2430,6 @@ function PatientWorkspace({
               <DialogContent className="sm:max-w-4xl">
                 <PrescriptionForm
                   form={prescriptionForm}
-                  prescriber={currentAccount.name}
                   onChange={setPrescriptionForm}
                   onSubmit={handleAddPrescription}
                   onCancel={() => setPrescriptionDialogOpen(false)}
@@ -2960,13 +2931,11 @@ function PatientWorkspace({
 
 function PrescriptionForm({
   form,
-  prescriber,
   onChange,
   onCancel,
   onSubmit,
 }: {
   form: PrescriptionFormState
-  prescriber: string
   onChange: (form: PrescriptionFormState) => void
   onCancel: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -3020,11 +2989,39 @@ function PrescriptionForm({
             onValueChange={(startDate) => onChange({ ...form, startDate })}
           />
         </Field>
-        <Field label="Fin">
-          <DateTextInput
-            value={form.endDate}
-            onValueChange={(endDate) => onChange({ ...form, endDate })}
+        <Field label="Duree">
+          <Input
+            required
+            min={1}
+            step={1}
+            type="number"
+            value={form.durationValue}
+            onChange={(event) =>
+              onChange({ ...form, durationValue: event.target.value })
+            }
           />
+        </Field>
+        <Field label="Unite">
+          <Select
+            value={form.durationUnit}
+            onValueChange={(durationUnit) =>
+              onChange({
+                ...form,
+                durationUnit: durationUnit as PrescriptionDurationUnit,
+              })
+            }
+          >
+            <SelectTrigger className="max-w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESCRIPTION_DURATION_UNITS.map((unit) => (
+                <SelectItem key={unit.value} value={unit.value}>
+                  {unit.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Statut">
           <Select
@@ -3043,48 +3040,18 @@ function PrescriptionForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Prescripteur">
-          <Input readOnly value={prescriber} />
-        </Field>
       </div>
 
       <div className="grid gap-3">
         {form.medications.map((medication, index) => (
           <div
             key={index}
-            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]"
+            className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_auto]"
           >
             <Field label="Medicament">
               <MedicineSearchInput
                 medication={medication}
                 onChange={(values) => updateMedication(index, values)}
-              />
-            </Field>
-            <Field label="Dose">
-              <Input
-                required
-                value={medication.dosage}
-                onChange={(event) =>
-                  updateMedication(index, { dosage: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="Frequence">
-              <Input
-                required
-                value={medication.frequency}
-                onChange={(event) =>
-                  updateMedication(index, { frequency: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="Voie">
-              <Input
-                required
-                value={medication.route}
-                onChange={(event) =>
-                  updateMedication(index, { route: event.target.value })
-                }
               />
             </Field>
             <div className="flex items-end justify-end">
@@ -3135,6 +3102,7 @@ function MedicineSearchInput({
   const [results, setResults] = useState<Medicine[]>([])
   const [loading, setLoading] = useState(false)
   const [searchError, setSearchError] = useState("")
+  const popoverContainerRef = useRef<HTMLDivElement>(null)
   const query = medication.medicationQuery.trim()
   const selected = medication.medicineId !== ""
 
@@ -3209,7 +3177,7 @@ function MedicineSearchInput({
     open && !selected && query.length >= MEDICINE_QUERY_MIN_LENGTH
 
   return (
-    <div className="grid gap-1">
+    <div ref={popoverContainerRef} className="grid gap-1">
       <Popover open={showResults} onOpenChange={setOpen}>
         <PopoverAnchor asChild>
           <div className="relative">
@@ -3227,9 +3195,10 @@ function MedicineSearchInput({
         <PopoverContent
           align="start"
           className="w-[min(34rem,calc(100vw-2rem))] p-1"
+          container={popoverContainerRef.current ?? undefined}
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          <div className="max-h-72 overflow-auto">
+          <div className="max-h-72 overflow-auto overscroll-contain">
             {loading && (
               <p className="px-3 py-2 text-sm text-muted-foreground">
                 Recherche...
@@ -5229,9 +5198,56 @@ function emptyPrescriptionForm(): PrescriptionFormState {
   return {
     medications: [emptyPrescriptionMedicationForm()],
     startDate: todayInput(),
-    endDate: "",
+    durationValue: "",
+    durationUnit: "days",
     status: "active",
   }
+}
+
+function prescriptionEndDateFromDuration(
+  startDate: string,
+  durationValue: string,
+  durationUnit: PrescriptionDurationUnit
+) {
+  const amount = Number(durationValue)
+
+  if (!Number.isInteger(amount) || amount < 1) {
+    throw new Error("Renseignez une duree valide")
+  }
+
+  const start = dateFromIsoValue(startDate)
+
+  if (!start) {
+    throw new Error("Renseignez une date de debut valide")
+  }
+
+  const end = new Date(start)
+
+  if (durationUnit === "days") {
+    end.setDate(end.getDate() + amount)
+  } else if (durationUnit === "weeks") {
+    end.setDate(end.getDate() + amount * 7)
+  } else if (durationUnit === "months") {
+    addMonthsClamped(end, amount)
+  } else {
+    addMonthsClamped(end, amount * 12)
+  }
+
+  return isoDateFromDate(end)
+}
+
+function addMonthsClamped(date: Date, months: number) {
+  const day = date.getDate()
+
+  date.setDate(1)
+  date.setMonth(date.getMonth() + months)
+  const lastDayOfTargetMonth = new Date(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    0
+  ).getDate()
+
+  date.setDate(Math.min(day, lastDayOfTargetMonth))
 }
 
 function emptyPrescriptionMedicationForm(): PrescriptionMedicationFormState {
@@ -5288,8 +5304,6 @@ function extractMedicineDosage(name: string) {
 function emptyPrescriptionFilters(): PrescriptionFilters {
   return {
     medication: "",
-    prescriber: "",
-    route: "",
     startDateFrom: "",
     startDateTo: "",
   }

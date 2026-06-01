@@ -7,7 +7,7 @@ export type AddPrescriptionInput = {
   frequency: string
   route: string
   startDate: string
-  endDate?: string
+  endDate: string
   status: string
 }
 

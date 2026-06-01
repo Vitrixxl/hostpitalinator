@@ -751,6 +751,7 @@ async fn all_domain_endpoints_have_working_create_and_list_paths() {
             "frequency": "3 fois par jour",
             "route": "PO",
             "startDate": "2026-06-01",
+            "endDate": "2026-06-08",
             "prescriber": "Marie Curie",
             "status": "active"
         })),

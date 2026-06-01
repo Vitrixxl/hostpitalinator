@@ -40,8 +40,11 @@ pub struct Prescription {
 #[serde(rename_all = "camelCase")]
 pub struct AddPrescriptionRequest {
     medicine_id: String,
+    #[serde(default)]
     dosage: String,
+    #[serde(default)]
     frequency: String,
+    #[serde(default)]
     route: String,
     start_date: String,
     end_date: Option<String>,
@@ -179,10 +182,8 @@ async fn update_prescription_status(
 impl AddPrescriptionRequest {
     fn validate(&self) -> ApiResult<()> {
         require_non_empty(&self.medicine_id, "medicineId")?;
-        require_non_empty(&self.dosage, "dosage")?;
-        require_non_empty(&self.frequency, "frequency")?;
-        require_non_empty(&self.route, "route")?;
         require_non_empty(&self.start_date, "startDate")?;
+        require_non_empty(self.end_date.as_deref().unwrap_or(""), "endDate")?;
         require_non_empty(&self.status, "status")?;
         Ok(())
     }
