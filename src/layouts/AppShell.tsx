@@ -328,7 +328,7 @@ function PatientDirectory({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border bg-card/90 p-4 shadow-[0_24px_80px_color-mix(in_oklch,var(--foreground),transparent_92%)] backdrop-blur sm:p-5">
+      <section className="rounded-3xl border bg-card/90 p-4 shadow-[0_24px_80px_color-mix(in_oklch,var(--foreground),transparent_92%)] backdrop-blur sm:p-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
@@ -368,28 +368,46 @@ function PatientDirectory({
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground" />
+        <div className="mt-6">
+          <div className="flex h-14 items-center rounded-xl border border-input/60 bg-background/80 shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+            <Search className="ml-4 size-5 shrink-0 text-muted-foreground" />
             <Input
-              className="h-14 rounded-[1.4rem] border-input/60 bg-background/80 pl-12 pr-4 text-base shadow-inner shadow-muted/60 focus-visible:ring-primary/20 md:text-base"
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-base shadow-none focus-visible:ring-0 md:text-base"
               placeholder="Rechercher par nom ou prenom"
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
             />
+            <button
+              type="button"
+              role="switch"
+              aria-checked={includeArchived}
+              className={cn(
+                "mr-2 flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                includeArchived
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "border-l border-border/70 text-muted-foreground hover:bg-muted/50"
+              )}
+              onClick={() => onIncludeArchivedChange(!includeArchived)}
+            >
+              <span
+                className={cn(
+                  "flex h-5 w-9 items-center rounded-full border p-0.5 transition-colors",
+                  includeArchived
+                    ? "border-primary-foreground/30 bg-primary-foreground/25"
+                    : "border-border bg-muted/40"
+                )}
+                aria-hidden="true"
+              >
+                <span
+                  className={cn(
+                    "size-4 rounded-full bg-background shadow-sm transition-transform",
+                    includeArchived && "translate-x-4"
+                  )}
+                />
+              </span>
+              Inclure archives
+            </button>
           </div>
-
-          <label className="flex h-11 items-center gap-2 rounded-full border bg-background/70 px-4 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className="size-4 rounded border-input"
-              checked={includeArchived}
-              onChange={(event) =>
-                onIncludeArchivedChange(event.target.checked)
-              }
-            />
-            Inclure archives
-          </label>
         </div>
 
         {patientError && (
@@ -399,7 +417,7 @@ function PatientDirectory({
         )}
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] border bg-card shadow-[0_28px_90px_color-mix(in_oklch,var(--foreground),transparent_90%)]">
+      <section className="overflow-hidden rounded-3xl border bg-card shadow-[0_28px_90px_color-mix(in_oklch,var(--foreground),transparent_90%)]">
         <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-background text-primary">

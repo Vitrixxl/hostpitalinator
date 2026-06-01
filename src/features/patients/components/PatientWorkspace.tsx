@@ -1306,7 +1306,7 @@ export function PatientWorkspace({
                     </DialogDescription>
                   </DialogHeader>
                   {editingVitalId ? (
-                    <Field label="Date et heure">
+                    <Field label="Date et heure" required>
                       <DateTimeTextInput
                         required
                         value={vitalForm.recordedAt}
@@ -1389,7 +1389,7 @@ export function PatientWorkspace({
                       setVitalForm((current) => ({ ...current, diuresis: value }))
                     }
                   />
-                  <Field label="Dernieres selles">
+                  <Field label="Dernieres selles" required>
                     <DateTextInput
                       required
                       value={vitalForm.lastStoolDate}
@@ -1837,7 +1837,7 @@ export function PatientWorkspace({
               onSubmit={handleAddDocument}
             >
               <SectionTitle icon={FileUp} title="Ajouter un document" />
-              <Field label="Titre">
+              <Field label="Titre" required>
                 <Input
                   required
                   value={documentForm.title}
@@ -1849,7 +1849,7 @@ export function PatientWorkspace({
                   }
                 />
               </Field>
-              <Field label="Categorie">
+              <Field label="Categorie" required>
                 <Select
                   value={documentForm.category}
                   onValueChange={(category) =>
@@ -1915,19 +1915,20 @@ export function PatientWorkspace({
                   Saisissez uniquement le contenu clinique de la note.
                 </p>
               </div>
-              <Textarea
-                required
-                aria-label="Contenu de la note"
-                className="min-h-72"
-                placeholder="Contenu de la note"
-                value={evolutionForm.content}
-                onChange={(event) =>
-                  setEvolutionForm((current) => ({
-                    ...current,
-                    content: event.target.value,
-                  }))
-                }
-              />
+              <Field label="Contenu" required>
+                <Textarea
+                  required
+                  className="min-h-72"
+                  placeholder="Contenu de la note"
+                  value={evolutionForm.content}
+                  onChange={(event) =>
+                    setEvolutionForm((current) => ({
+                      ...current,
+                      content: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button
                   type="button"

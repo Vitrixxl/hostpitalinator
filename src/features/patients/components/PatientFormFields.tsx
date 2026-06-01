@@ -6,7 +6,6 @@ import { DateTextInput } from "@/components/common/DateInputs"
 import { Field } from "@/components/common/Field"
 import { BedSelect, ServiceSelect, SexSelect } from "@/components/common/FormControls"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { Account, Bed, Service } from "@/types"
 
@@ -36,35 +35,35 @@ export function PatientFormFields({
   return (
     <div className="grid gap-3">
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label="Prenom">
+        <Field label="Prenom" required>
           <Input
             required
             value={form.firstName}
             onChange={(event) => updateField("firstName", event.target.value)}
           />
         </Field>
-        <Field label="Nom">
+        <Field label="Nom" required>
           <Input
             required
             value={form.lastName}
             onChange={(event) => updateField("lastName", event.target.value)}
           />
         </Field>
-        <Field label="Date de naissance">
+        <Field label="Date de naissance" required>
           <DateTextInput
             required
             value={form.birthDate}
             onValueChange={(birthDate) => updateField("birthDate", birthDate)}
           />
         </Field>
-        <Field label="Sexe">
+        <Field label="Sexe" required={administrativeRequired}>
           <SexSelect
             required={administrativeRequired}
             value={form.sex}
             onChange={(sex) => updateField("sex", sex)}
           />
         </Field>
-        <Field label="Service">
+        <Field label="Service" required>
           <ServiceSelect
             services={services}
             required
@@ -85,15 +84,14 @@ export function PatientFormFields({
           />
         </Field>
         <div className="grid gap-3 md:col-span-2 md:grid-cols-[minmax(0,1fr)_11rem]">
-          <div className="grid gap-1.5">
-            <Label htmlFor={addressInputId}>Adresse</Label>
+          <Field label="Adresse" required={administrativeRequired}>
             <AddressAutocomplete
               id={addressInputId}
               required={administrativeRequired}
               value={form.address}
               onChange={(address) => updateField("address", address)}
             />
-          </div>
+          </Field>
           <Field label="Appartement">
             <Input
               placeholder="Optionnel"
@@ -104,7 +102,7 @@ export function PatientFormFields({
             />
           </Field>
         </div>
-        <Field label="Telephone">
+        <Field label="Telephone" required={administrativeRequired}>
           <Input
             required={administrativeRequired}
             type="tel"
@@ -112,7 +110,7 @@ export function PatientFormFields({
             onChange={(event) => updateField("phoneNumber", event.target.value)}
           />
         </Field>
-        <Field label="Courriel">
+        <Field label="Courriel" required={administrativeRequired}>
           <Input
             required={administrativeRequired}
             type="email"
