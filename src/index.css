@@ -141,3 +141,96 @@
     font: inherit;
   }
 }
+
+@layer components {
+  .patient-tab-panel {
+    view-transition-name: patient-tab-panel;
+  }
+
+  .patient-tab-panel[data-state="active"].patient-tab-panel-forward {
+    animation: patient-tab-enter-from-right 220ms ease-out;
+  }
+
+  .patient-tab-panel[data-state="active"].patient-tab-panel-backward {
+    animation: patient-tab-enter-from-left 220ms ease-out;
+  }
+}
+
+@keyframes patient-tab-enter-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes patient-tab-enter-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-1.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+::view-transition-old(patient-tab-panel),
+::view-transition-new(patient-tab-panel) {
+  animation-duration: 260ms;
+  animation-timing-function: ease;
+  mix-blend-mode: normal;
+}
+
+html[data-patient-tab-direction="forward"]
+  ::view-transition-old(patient-tab-panel) {
+  animation-name: patient-tab-leave-left;
+}
+
+html[data-patient-tab-direction="forward"]
+  ::view-transition-new(patient-tab-panel) {
+  animation-name: patient-tab-enter-right;
+}
+
+html[data-patient-tab-direction="backward"]
+  ::view-transition-old(patient-tab-panel) {
+  animation-name: patient-tab-leave-right;
+}
+
+html[data-patient-tab-direction="backward"]
+  ::view-transition-new(patient-tab-panel) {
+  animation-name: patient-tab-enter-left;
+}
+
+@keyframes patient-tab-leave-left {
+  to {
+    opacity: 0;
+    transform: translateX(-2rem);
+  }
+}
+
+@keyframes patient-tab-leave-right {
+  to {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+}
+
+@keyframes patient-tab-enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+}
+
+@keyframes patient-tab-enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-2rem);
+  }
+}

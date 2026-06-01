@@ -1,1 +1,1 @@
-export {}
+export { VitalMeasureChart } from "./components/VitalMeasureChart"

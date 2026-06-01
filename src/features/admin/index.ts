@@ -1,1 +1,1 @@
-export {}
+export { AdminPanel } from "./components/AdminPanel"
