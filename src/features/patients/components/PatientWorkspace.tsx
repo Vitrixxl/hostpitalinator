@@ -12,7 +12,6 @@ import {
   FileText,
   FileUp,
   FlaskConical,
-  Home,
   LogOutIcon,
   Pencil,
   Plus,
