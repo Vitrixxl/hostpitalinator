@@ -4,7 +4,7 @@ Application hospitaliere basee sur React, shadcn/ui, une API HTTP Rust separee a
 
 ## Stack
 
-- Frontend: Vite, React, TypeScript
+- Frontend: Bun bundler, React, TypeScript
 - Runtime JS et package manager: Bun
 - UI: shadcn/ui avec le preset `b4XcoPzQav`
 - API: Rust, Axum, SQLite via sqlx
@@ -34,6 +34,7 @@ Toutes les commandes JavaScript du projet doivent etre lancees avec Bun, pas ave
 
 Variables utiles:
 
+- `PUBLIC_API_BASE_URL`: URL de base injectee dans le frontend par Bun; defaut vide en production, `http://127.0.0.1:4000` via `bun run dev`
 - `API_HOST`: defaut `127.0.0.1`
 - `API_PORT`: defaut `4000`
 - `WEB_ORIGINS`: origines CORS separees par des virgules; defaut `http://127.0.0.1:5173,http://localhost:5173,tauri://localhost,http://tauri.localhost,https://tauri.localhost`

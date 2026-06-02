@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-COPY components.json eslint.config.js index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts ./
+COPY build.ts bunfig.toml components.json eslint.config.js index.html tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY public ./public
 COPY src ./src
 RUN bun run build

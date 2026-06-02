@@ -12,7 +12,7 @@ L'application doit fonctionner en temps reel: les utilisateurs ne doivent pas av
 
 Le depot contient volontairement une structure minimale:
 
-- application Vite React TypeScript fonctionnelle;
+- application React TypeScript construite avec Bun;
 - commandes JavaScript lancees avec Bun;
 - preset shadcn applique avec `--preset b4XcoPzQav`;
 - composants shadcn de base installes;
@@ -240,7 +240,7 @@ Principe API:
 
 - React appelle `src/api/*.api.ts`;
 - `src/api/client.ts` utilise `fetch`;
-- l'URL de base est `VITE_API_BASE_URL`;
+- l'URL de base est `PUBLIC_API_BASE_URL`;
 - l'API expose des endpoints HTTP REST en JSON;
 - les reponses JSON utilisent `camelCase` pour rester compatibles avec le frontend;
 - les erreurs API suivent la forme `{ "error": { "code": "...", "message": "..." } }`;

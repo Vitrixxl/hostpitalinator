@@ -1,6 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ??
-  (import.meta.env.DEV ? "http://127.0.0.1:4000" : "")
+  process.env.PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? ""
 const API_AUTH_TOKEN_KEY = "hospitalinator.apiToken"
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
