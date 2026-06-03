@@ -22,14 +22,14 @@ import type { PatientTab, PrescriptionDurationUnit } from "./types";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Administrateur",
-  doctor: "Medecin",
+  doctor: "Médecin",
   nurse: "Infirmier",
-  secretary: "Secretaire",
+  secretary: "Secrétaire",
 };
 
 export const ACCOUNT_STATUS_LABELS: Record<Account["status"], string> = {
   active: "Actif",
-  invited: "Invite",
+  invited: "Invité",
   disabled: "Suspendu",
 };
 
@@ -58,7 +58,7 @@ export const LAB_STATUS_LABELS: Record<LabStatus, string> = {
   normal: "Normal",
   alerte: "Alerte",
   critique: "Critique",
-  "a verifier": "A verifier",
+  "a verifier": "À vérifier",
 };
 
 export const PATIENT_TABS: Array<{
@@ -66,8 +66,8 @@ export const PATIENT_TABS: Array<{
   label: string;
   icon: LucideIcon;
 }> = [
-  { value: "summary", label: "Synthese", icon: Stethoscope },
-  { value: "entrance", label: "Examen entree", icon: ClipboardPenLine },
+  { value: "summary", label: "Synthèse", icon: Stethoscope },
+  { value: "entrance", label: "Examen d'entrée", icon: ClipboardPenLine },
   { value: "vitals", label: "Constantes", icon: HeartPulse },
   { value: "prescriptions", label: "Prescriptions", icon: ClipboardList },
   { value: "labs", label: "Biologie", icon: FlaskConical },
@@ -80,8 +80,8 @@ export const PATIENT_TAB_VALUES = PATIENT_TABS.map((tab) => tab.value);
 export const PRESCRIPTION_STATUS_LABELS: Record<string, string> = {
   active: "Active",
   paused: "En pause",
-  completed: "Terminee",
-  stopped: "Arretee",
+  completed: "Terminée",
+  stopped: "Arrêtée",
 };
 
 export const PRESCRIPTION_STATUSES = Object.keys(PRESCRIPTION_STATUS_LABELS);
@@ -93,7 +93,7 @@ export const PRESCRIPTION_DURATION_UNITS: Array<{
   { value: "days", label: "Jours" },
   { value: "weeks", label: "Semaines" },
   { value: "months", label: "Mois" },
-  { value: "years", label: "Annees" },
+  { value: "years", label: "Années" },
 ];
 
 export const UNASSIGNED_BED_VALUE = "__unassigned__";

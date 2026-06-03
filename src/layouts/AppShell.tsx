@@ -514,7 +514,7 @@ function ServiceSearchPopover({
           variant="outline"
           className="max-w-56 justify-between"
           disabled={disabled}
-          aria-label="Selectionner un service"
+          aria-label="Sélectionner un service"
         >
           <Building2 className="size-4" />
           <span className="min-w-0 truncate">{value || "Service"}</span>
@@ -560,7 +560,7 @@ function ServiceSearchPopover({
             })
           ) : (
             <p className="px-3 py-4 text-sm text-muted-foreground">
-              Aucun service trouve
+              Aucun service trouvé
             </p>
           )}
         </div>
@@ -620,11 +620,11 @@ function NewVisitDialog({
         {selectedPatient ? (
           <div className="grid gap-5">
             <DialogHeader>
-              <DialogTitle>Confirmer la nouvelle entree</DialogTitle>
+              <DialogTitle>Confirmer la nouvelle entrée</DialogTitle>
               <DialogDescription>
-                Validez que ce patient commence une nouvelle entree dans votre
+                Validez que ce patient commence une nouvelle entrée dans votre
                 service
-                {selectedBed ? " et occupe le lit selectionne." : "."}
+                {selectedBed ? " et occupe le lit sélectionné." : "."}
               </DialogDescription>
             </DialogHeader>
 
@@ -645,7 +645,7 @@ function NewVisitDialog({
                     <Badge variant="secondary">
                       Service actuel {selectedPatient.currentService}
                     </Badge>
-                    <Badge>Nouvelle entree {admissionService}</Badge>
+                    <Badge>Nouvelle entrée {admissionService}</Badge>
                     {selectedBed && (
                       <Badge variant="outline">
                         Chambre {selectedBed.room} · lit {selectedBed.label}
@@ -656,8 +656,8 @@ function NewVisitDialog({
                     )}
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Entree courante{" "}
-                    {selectedPatient.currentVisitId ?? "non renseignee"}
+                    Entrée courante{" "}
+                    {selectedPatient.currentVisitId ?? "non renseignée"}
                     {selectedPatient.currentVisitStartedAt
                       ? ` · ${formatShortDateTime(
                           selectedPatient.currentVisitStartedAt,
@@ -708,8 +708,8 @@ function NewVisitDialog({
                     Chambre {selectedBed.room} · lit {selectedBed.label}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Choisissez une fiche existante ou creez un nouveau dossier
-                    patient avec ce lit preselectionne.
+                    Choisissez une fiche existante ou créez un nouveau dossier
+                    patient avec ce lit présélectionné.
                   </p>
                 </div>
               </div>
@@ -724,7 +724,7 @@ function NewVisitDialog({
                 onClick={() => onModeChange("search")}
               >
                 <Search className="size-4" />
-                Patient deja venu
+                Patient déjà venu
               </Button>
               <Button
                 type="button"
@@ -740,7 +740,7 @@ function NewVisitDialog({
             <DialogHeader>
               <DialogTitle>Nouvelle visite</DialogTitle>
               <DialogDescription>
-                Choisissez le patient. Le service de la nouvelle entree sera{" "}
+                Choisissez le patient. Le service de la nouvelle entrée sera{" "}
                 {admissionService}
                 {selectedBed
                   ? `, avec le lit ${selectedBed.label} de la chambre ${selectedBed.room}.`
@@ -806,7 +806,7 @@ function NewVisitDialog({
                         <span>Service {patient.currentService}</span>
                         <span>Lit {bedLabel(beds, patient.bedId)}</span>
                         <span>
-                          Entree {patient.currentVisitId ?? "non renseignee"}
+                          Entrée {patient.currentVisitId ?? "non renseignée"}
                         </span>
                       </div>
                     </button>
@@ -814,7 +814,7 @@ function NewVisitDialog({
                 </div>
               ) : (
                 <div className="flex h-full min-h-[24rem] items-center justify-center p-4 text-center text-sm text-muted-foreground">
-                  {loading ? "Chargement des patients" : "Aucun patient trouve"}
+                  {loading ? "Chargement des patients" : "Aucun patient trouvé"}
                 </div>
               )}
             </ScrollArea>
@@ -899,7 +899,7 @@ function PatientDirectory({
               )}
               onClick={() => onIncludeArchivedChange(!includeArchived)}
             >
-              Inclure archives
+              Inclure archivés
             </button>
             <Button type="button" variant="outline" onClick={onCreateVisit}>
               <CalendarPlus className="size-4" />
@@ -964,7 +964,7 @@ function PatientSearchPopover({
             <Search className="ml-3 size-4 shrink-0 text-muted-foreground" />
             <Input
               className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0 md:text-sm"
-              placeholder="Rechercher par nom ou prenom"
+              placeholder="Rechercher par nom ou prénom"
               value={search}
               onFocus={() => setOpen(true)}
               onChange={(event) => {
@@ -1017,7 +1017,7 @@ function PatientSearchPopover({
               </div>
             ) : (
               <p className="px-3 py-4 text-sm text-muted-foreground">
-                {loading ? "Chargement des patients" : "Aucun patient trouve"}
+                {loading ? "Chargement des patients" : "Aucun patient trouvé"}
               </p>
             )}
           </div>
@@ -1066,7 +1066,7 @@ function RoomBedOverview({
               Chambres du service{serviceName ? ` ${serviceName}` : ""}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {occupiedCount} lit{occupiedCount > 1 ? "s" : ""} occupe
+              {occupiedCount} lit{occupiedCount > 1 ? "s" : ""} occupé
               {occupiedCount > 1 ? "s" : ""} sur {beds.length}.
             </p>
           </div>
@@ -1143,7 +1143,7 @@ function RoomBedOverview({
                               Lit {bed.label}
                             </span>
                             <span className="mt-0.5 block truncate text-sm font-medium">
-                              {bed.occupiedPatientName ?? "Patient assigne"}
+                              {bed.occupiedPatientName ?? "Patient assigné"}
                             </span>
                           </span>
                           <span className="shrink-0 text-xs">
@@ -1179,7 +1179,7 @@ function groupBedsByRoom(beds: Bed[]) {
   const rooms = new Map<string, Bed[]>();
 
   for (const bed of beds) {
-    const roomName = bed.room.trim() || "Non renseignee";
+    const roomName = bed.room.trim() || "Non renseignée";
     rooms.set(roomName, [...(rooms.get(roomName) ?? []), bed]);
   }
 

@@ -92,7 +92,7 @@ export function AuthScreen({
               </div>
             </div>
             <CardDescription>
-              Identifiez-vous pour acceder aux dossiers patients.
+              Identifiez-vous pour accéder aux dossiers patients.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -207,7 +207,7 @@ export function AuthScreen({
                   ) : (
                     <UserPlus className="size-4" />
                   )}
-                  Creer le premier administrateur
+                  Créer le premier administrateur
                 </Button>
               </form>
             )}

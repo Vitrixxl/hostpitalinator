@@ -127,7 +127,7 @@ export function QuickActionDialog({
             <ul className="space-y-0.5">
               {filtered.length === 0 && (
                 <li className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  Aucune action trouvee.
+                  Aucune action trouvée.
                 </li>
               )}
               {filtered.map((action, index) => (
@@ -176,7 +176,7 @@ export function QuickActionDialog({
             <kbd className="rounded bg-muted px-1.5 py-0.5 text-foreground">
               Enter
             </kbd>{" "}
-            Selectionner
+            Sélectionner
           </span>
           <span>
             <kbd className="rounded bg-muted px-1.5 py-0.5 text-foreground">

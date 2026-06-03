@@ -32,7 +32,7 @@ export function LabPanelDetailsDialog({
             <DialogHeader>
               <DialogTitle>{panel.panelType}</DialogTitle>
               <DialogDescription>
-                Prelevement du {formatShortDateTime(panel.sampledAt)} ·{" "}
+                Prélèvement du {formatShortDateTime(panel.sampledAt)} ·{" "}
                 {panel.results.length} valeur
                 {panel.results.length > 1 ? "s" : ""}
               </DialogDescription>
@@ -44,7 +44,7 @@ export function LabPanelDetailsDialog({
                   <TableRow>
                     <TableHead>Marqueur</TableHead>
                     <TableHead>Valeur</TableHead>
-                    <TableHead>Reference</TableHead>
+                    <TableHead>Référence</TableHead>
                     <TableHead>Statut</TableHead>
                   </TableRow>
                 </TableHeader>

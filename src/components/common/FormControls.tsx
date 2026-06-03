@@ -56,7 +56,7 @@ export function SexSelect({
     <Select value={value} onValueChange={onChange} required={required}>
       <SelectTrigger className="max-w-full">
         <Users className="size-4 text-muted-foreground" />
-        <SelectValue placeholder="Selectionner" />
+        <SelectValue placeholder="Sélectionner" />
       </SelectTrigger>
       <SelectContent>
         {PATIENT_SEXES.map((sex) => (
@@ -100,7 +100,7 @@ export function BedSelect({
         <SelectValue placeholder="Lit" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={UNASSIGNED_BED_VALUE}>Non assigne</SelectItem>
+        <SelectItem value={UNASSIGNED_BED_VALUE}>Non assigné</SelectItem>
         {assignableBeds.map((bed) => (
           <SelectItem key={bed.id} value={bed.id}>
             {bedLabelText(bed)}
@@ -141,7 +141,7 @@ export function ServiceSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={UNSELECTED_SERVICE_VALUE} disabled>
-          Selectionner un service
+          Sélectionner un service
         </SelectItem>
         {services.map((service) => (
           <SelectItem key={service.id} value={service.name}>

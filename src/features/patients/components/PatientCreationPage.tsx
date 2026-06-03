@@ -33,10 +33,10 @@ export function PatientCreationPage({
       <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-heading text-2xl font-medium">
-            Creation d'un nouveau patient
+            Création d'un nouveau patient
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Identite, coordonnees et affectation initiale.
+            Identité, coordonnées et affectation initiale.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={onCancel}>
@@ -48,7 +48,7 @@ export function PatientCreationPage({
 
       <form className="space-y-4" onSubmit={onSubmit}>
         <section className="rounded-3xl border bg-background p-4 shadow">
-          <SectionTitle icon={UserPlus} title="Donnees administratives" />
+          <SectionTitle icon={UserPlus} title="Données administratives" />
           <PatientFormFields
             account={account}
             administrativeRequired
@@ -65,7 +65,7 @@ export function PatientCreationPage({
           </Button>
           <Button type="submit">
             <Plus className="size-4" />
-            Creer le dossier
+            Créer le dossier
           </Button>
         </div>
       </form>

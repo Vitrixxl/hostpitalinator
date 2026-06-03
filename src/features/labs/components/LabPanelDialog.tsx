@@ -57,13 +57,13 @@ export function LabPanelDialog({
           <DialogHeader>
             <DialogTitle>Nouveau bilan biologique</DialogTitle>
             <DialogDescription>
-              Selectionnez un type de bilan puis renseignez les valeurs
+              Sélectionnez un type de bilan puis renseignez les valeurs
               disponibles.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Date de prelevement" required>
+            <Field label="Date de prélèvement" required>
               <DateTimeTextInput
                 required
                 value={form.sampledAt}
@@ -99,8 +99,8 @@ export function LabPanelDialog({
                 <TableRow>
                   <TableHead>Marqueur</TableHead>
                   <TableHead>Valeur</TableHead>
-                  <TableHead>Unite</TableHead>
-                  <TableHead>Reference</TableHead>
+                  <TableHead>Unité</TableHead>
+                  <TableHead>Référence</TableHead>
                   <TableHead>Statut</TableHead>
                 </TableRow>
               </TableHeader>

@@ -29,7 +29,7 @@ const CLINICAL_REFERENCE_QUERY_MIN_LENGTH = 2;
 
 const ANTECEDENT_LABELS: Record<AntecedentCategory, string> = {
   pathology: "Pathologies",
-  medical_act: "Actes medicaux",
+  medical_act: "Actes médicaux",
 };
 
 const VISIBLE_ANTECEDENT_CATEGORIES = ["pathology", "medical_act"] as const;
@@ -120,8 +120,8 @@ export function EntranceExamPanel({
     <form className="grid gap-4 rounded-3xl" onSubmit={onSubmit}>
       {!patientHasActiveVisit && (
         <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
-          Aucun passage actif. Les informations enregistrees ici resteront en
-          brouillon et seront reprises a la prochaine visite.
+          Aucun passage actif. Les informations enregistrées ici resteront en
+          brouillon et seront reprises à la prochaine visite.
         </div>
       )}
 
@@ -143,7 +143,7 @@ export function EntranceExamPanel({
                 </div>
                 {isDraftMode && (
                   <p className="text-sm text-muted-foreground">
-                    Donnees conservees hors visite active.
+                    Données conservées hors visite active.
                   </p>
                 )}
               </div>
@@ -171,7 +171,7 @@ export function EntranceExamPanel({
                   }
                 />
               </Field>
-              <Field label="Synthese">
+              <Field label="Synthèse">
                 <Textarea
                   className="min-h-40"
                   value={form.synthesis}
@@ -185,11 +185,11 @@ export function EntranceExamPanel({
 
           <section className="grid gap-3">
             <h3 className="font-heading text-base font-medium">
-              Examens d'entree
+              Examens d'entrée
             </h3>
             {visibleExams.length === 0 && !loadingExams ? (
               <div className="rounded-3xl border border-dashed p-4 text-sm text-muted-foreground">
-                Aucun examen d'entree enregistre.
+                Aucun examen d'entrée enregistré.
               </div>
             ) : (
               <div className="grid gap-3">
@@ -257,7 +257,7 @@ export function EntranceExamPanel({
                 </button>
               )}
               {groupedAntecedents[category].length === 0 && (
-                <span className="sr-only">Aucun element renseigne</span>
+                <span className="sr-only">Aucun élément renseigné</span>
               )}
             </div>
           ))}
@@ -305,7 +305,7 @@ function EntranceExamHistoryCard({
       <div className="grid gap-2 lg:grid-cols-3 w-full">
         <HistoryTextBlock label="Mode de vie" value={exam.lifestyle} />
         <HistoryTextBlock label="Historique" value={exam.diseaseHistory} />
-        <HistoryTextBlock label="Synthese" value={exam.synthesis} />
+        <HistoryTextBlock label="Synthèse" value={exam.synthesis} />
       </div>
     </article>
   );
@@ -319,7 +319,7 @@ function entranceExamSubmitLabel(
     return "Sauvegarder le brouillon";
   }
 
-  return hasCurrentExam ? "Mettre a jour" : "Enregistrer";
+  return hasCurrentExam ? "Mettre à jour" : "Enregistrer";
 }
 
 function HistoryTextBlock({
@@ -333,7 +333,7 @@ function HistoryTextBlock({
     <div className="rounded-lg border bg-muted/20 p-3">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 whitespace-pre-wrap">
-        {value?.trim() ? value : "Non renseigne"}
+        {value?.trim() ? value : "Non renseigné"}
       </p>
     </div>
   );
@@ -371,7 +371,7 @@ function addAntecedentLabel(category: AntecedentCategory) {
     return "Ajouter un acte";
   }
 
-  return "Ajouter une entree";
+  return "Ajouter une entrée";
 }
 
 function AntecedentEditor({
@@ -411,7 +411,7 @@ function AntecedentEditor({
         <Button
           type="button"
           variant="destructive"
-          aria-label="Supprimer l'antecedent"
+          aria-label="Supprimer l'antécédent"
           className="flex-1"
           onClick={onRemove}
         >
@@ -421,7 +421,7 @@ function AntecedentEditor({
           className="flex-1"
           type="submit"
           variant="default"
-          aria-label="Ajouter l'antecedent"
+          aria-label="Ajouter l'antécédent"
         >
           Ajouter
         </Button>
@@ -548,7 +548,7 @@ function ClinicalReferenceInput({
               )}
               {!loading && !searchError && results.length === 0 && (
                 <p className="px-3 py-2 text-sm text-muted-foreground">
-                  Aucune reference trouvee
+                  Aucune référence trouvée
                 </p>
               )}
               {!loading &&
@@ -582,7 +582,7 @@ function ClinicalReferenceInput({
             })
           }
         >
-          Modifier la reference
+          Modifier la référence
         </button>
       )}
     </div>

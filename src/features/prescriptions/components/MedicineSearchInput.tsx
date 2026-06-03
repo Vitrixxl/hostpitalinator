@@ -136,7 +136,7 @@ export function MedicineSearchInput({
             )}
             {!loading && !searchError && results.length === 0 && (
               <p className="px-3 py-2 text-sm text-muted-foreground">
-                Aucun medicament trouve
+                Aucun médicament trouvé
               </p>
             )}
             {!loading &&

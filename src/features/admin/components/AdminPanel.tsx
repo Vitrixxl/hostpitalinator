@@ -288,7 +288,7 @@ export function AdminPanel({
       setCreateForm(emptyAccountForm(defaultServiceName))
       await loadAccounts()
       setSelectedAccountId(result.account.id)
-    }, "Compte cree")
+    }, "Compte créé")
   }
 
   async function handleCreateService(event: FormEvent<HTMLFormElement>) {
@@ -299,7 +299,7 @@ export function AdminPanel({
       await loadCatalog()
       onCatalogChanged()
       setSelectedServiceId(service.id)
-    }, "Service cree")
+    }, "Service créé")
   }
 
   async function handleUpdateService(event: FormEvent<HTMLFormElement>) {
@@ -313,7 +313,7 @@ export function AdminPanel({
       await updateService(selectedServiceId, { name: editServiceForm.name })
       await Promise.all([loadCatalog(), loadAccounts()])
       onCatalogChanged()
-    }, "Service mis a jour")
+    }, "Service mis à jour")
   }
 
   async function handleDeleteService() {
@@ -331,7 +331,7 @@ export function AdminPanel({
       await deleteService(selectedService.id)
       await loadCatalog()
       onCatalogChanged()
-    }, "Service supprime")
+    }, "Service supprimé")
   }
 
   async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
@@ -342,7 +342,7 @@ export function AdminPanel({
       await loadCatalog()
       onCatalogChanged()
       setSelectedRoomId(room.id)
-    }, "Chambre creee")
+    }, "Chambre créée")
   }
 
   async function handleUpdateRoom(event: FormEvent<HTMLFormElement>) {
@@ -374,7 +374,7 @@ export function AdminPanel({
       await deleteRoom(selectedRoom.id)
       await loadCatalog()
       onCatalogChanged()
-    }, "Chambre supprimee")
+    }, "Chambre supprimée")
   }
 
   async function handleCreateBed(event: FormEvent<HTMLFormElement>) {
@@ -385,7 +385,7 @@ export function AdminPanel({
       await loadCatalog()
       onCatalogChanged()
       setSelectedBedId(bed.id)
-    }, "Lit cree")
+    }, "Lit créé")
   }
 
   async function handleUpdateBed(event: FormEvent<HTMLFormElement>) {
@@ -399,7 +399,7 @@ export function AdminPanel({
       await updateBed(selectedBedId, bedFormToInput(editBedForm))
       await loadCatalog()
       onCatalogChanged()
-    }, "Lit mis a jour")
+    }, "Lit mis à jour")
   }
 
   async function handleDeleteBed() {
@@ -417,7 +417,7 @@ export function AdminPanel({
       await deleteBed(selectedBed.id)
       await loadCatalog()
       onCatalogChanged()
-    }, "Lit supprime")
+    }, "Lit supprimé")
   }
 
   async function handleUpdateAccount(event: FormEvent<HTMLFormElement>) {
@@ -435,7 +435,7 @@ export function AdminPanel({
         service: editForm.service,
       })
       await loadAccounts()
-    }, "Compte mis a jour")
+    }, "Compte mis à jour")
   }
 
   async function handleAssignRole() {
@@ -446,7 +446,7 @@ export function AdminPanel({
     await runAdminAction(async () => {
       await assignRole(selectedAccountId, editForm.role)
       await loadAccounts()
-    }, "Role affecte")
+    }, "Rôle affecté")
   }
 
   async function handleDisableAccount() {
@@ -469,7 +469,7 @@ export function AdminPanel({
       const result = await resetAccountPassword(selectedAccountId)
       setGeneratedPassword(result.generatedPassword)
       await loadAccounts()
-    }, "Mot de passe regenere")
+    }, "Mot de passe régénéré")
   }
 
   return (
@@ -519,7 +519,7 @@ export function AdminPanel({
       {generatedPassword && (
         <AlertMessage
           tone="success"
-          message={`Mot de passe genere: ${generatedPassword}`}
+          message={`Mot de passe généré: ${generatedPassword}`}
         />
       )}
 
@@ -581,7 +581,7 @@ export function AdminPanel({
             </Field>
             <Button type="submit">
               <Plus className="size-4" />
-              Creer
+              Créer
             </Button>
           </form>
 
@@ -589,7 +589,7 @@ export function AdminPanel({
             className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
             onSubmit={handleUpdateService}
           >
-            <SectionTitle icon={Building2} title="Service selectionne" />
+            <SectionTitle icon={Building2} title="Service sélectionné" />
             {selectedService ? (
               <>
                 <Field label="Nom" required>
@@ -617,7 +617,7 @@ export function AdminPanel({
                 </div>
               </>
             ) : (
-              <EmptyState label="Aucun service selectionne" />
+              <EmptyState label="Aucun service sélectionné" />
             )}
           </form>
         </div>
@@ -629,7 +629,7 @@ export function AdminPanel({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Libelle</TableHead>
+                <TableHead>Libellé</TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead>Lits</TableHead>
               </TableRow>
@@ -666,7 +666,7 @@ export function AdminPanel({
             />
             <Button type="submit" disabled={services.length === 0}>
               <Plus className="size-4" />
-              Creer
+              Créer
             </Button>
           </form>
 
@@ -674,7 +674,7 @@ export function AdminPanel({
             className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
             onSubmit={handleUpdateRoom}
           >
-            <SectionTitle icon={Building2} title="Chambre selectionnee" />
+            <SectionTitle icon={Building2} title="Chambre sélectionnée" />
             {selectedRoom ? (
               <>
                 <RoomFields
@@ -699,7 +699,7 @@ export function AdminPanel({
                 </div>
               </>
             ) : (
-              <EmptyState label="Aucune chambre selectionnee" />
+              <EmptyState label="Aucune chambre sélectionnée" />
             )}
           </form>
         </div>
@@ -711,7 +711,7 @@ export function AdminPanel({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Libelle</TableHead>
+                <TableHead>Libellé</TableHead>
                 <TableHead>Chambre</TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead>Patient</TableHead>
@@ -748,7 +748,7 @@ export function AdminPanel({
             />
             <Button type="submit" disabled={rooms.length === 0}>
               <Plus className="size-4" />
-              Creer
+              Créer
             </Button>
           </form>
 
@@ -756,7 +756,7 @@ export function AdminPanel({
             className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
             onSubmit={handleUpdateBed}
           >
-            <SectionTitle icon={BedIcon} title="Lit selectionne" />
+            <SectionTitle icon={BedIcon} title="Lit sélectionné" />
             {selectedBed ? (
               <>
                 <BedFields
@@ -781,7 +781,7 @@ export function AdminPanel({
                 </div>
               </>
             ) : (
-              <EmptyState label="Aucun lit selectionne" />
+              <EmptyState label="Aucun lit sélectionné" />
             )}
           </form>
         </div>
@@ -837,7 +837,7 @@ export function AdminPanel({
             />
             <Button type="submit" disabled={services.length === 0}>
               <UserPlus className="size-4" />
-              Creer
+              Créer
             </Button>
           </form>
 
@@ -845,7 +845,7 @@ export function AdminPanel({
             className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
             onSubmit={handleUpdateAccount}
           >
-            <SectionTitle icon={UserCog} title="Compte selectionne" />
+            <SectionTitle icon={UserCog} title="Compte sélectionné" />
             {selectedAccount ? (
               <>
                 <AccountFields
@@ -886,7 +886,7 @@ export function AdminPanel({
                 </div>
               </>
             ) : (
-              <EmptyState label="Aucun compte selectionne" />
+              <EmptyState label="Aucun compte sélectionné" />
             )}
           </form>
         </div>
@@ -960,7 +960,7 @@ function AccountFields({
               onChange({ ...form, invite: event.target.checked })
             }
           />
-          Marquer comme invite
+          Marquer comme invité
         </label>
       )}
     </>
@@ -978,7 +978,7 @@ function BedFields({
 }) {
   return (
     <>
-      <Field label="Libelle" required>
+      <Field label="Libellé" required>
         <Input
           required
           value={form.label}
@@ -992,7 +992,7 @@ function BedFields({
           onValueChange={(roomId) => onChange({ ...form, roomId })}
         >
           <SelectTrigger className="max-w-full">
-            <SelectValue placeholder="Selectionner une chambre" />
+            <SelectValue placeholder="Sélectionner une chambre" />
           </SelectTrigger>
           <SelectContent>
             {rooms.map((room) => (
@@ -1031,7 +1031,7 @@ function RoomFields({
 }) {
   return (
     <>
-      <Field label="Libelle" required>
+      <Field label="Libellé" required>
         <Input
           required
           value={form.label}

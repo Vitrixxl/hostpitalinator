@@ -3,7 +3,7 @@ import type { Bed, PatientSex } from "@/types"
 import { PATIENT_SEX_LABELS, PRESCRIPTION_STATUS_LABELS } from "./constants"
 
 export function patientSexLabel(sex?: PatientSex | null) {
-  return sex ? PATIENT_SEX_LABELS[sex] ?? sex : "Non renseigne"
+  return sex ? PATIENT_SEX_LABELS[sex] ?? sex : "Non renseigné"
 }
 
 export function prescriptionStatusLabel(status: string) {
@@ -32,7 +32,7 @@ export function textIncludes(value: string, filter: string) {
 
 export function bedLabel(beds: Bed[], bedId?: string | null) {
   if (!bedId) {
-    return "Non assigne"
+    return "Non assigné"
   }
 
   return bedLabelText(beds.find((bed) => bed.id === bedId) ?? bedId)
@@ -43,7 +43,7 @@ export function bedLabelText(bed: Bed | string) {
     return bed
   }
 
-  const roomLabel = bed.room ? `Chambre ${bed.room}` : "Chambre non renseignee"
+  const roomLabel = bed.room ? `Chambre ${bed.room}` : "Chambre non renseignée"
   const label = `${roomLabel}, lit ${bed.label}`
 
   return bed.service ? `${label} - ${bed.service}` : label

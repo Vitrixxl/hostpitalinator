@@ -3,7 +3,7 @@ import { ApiRequestError } from "@/api/client"
 export function errorMessage(error: unknown) {
   if (error instanceof ApiRequestError) {
     if (error.code === "unauthorized") {
-      return "Identifiants invalides ou session expiree"
+      return "Identifiants invalides ou session expirée"
     }
 
     return localizeErrorText(error.message, error.code)
@@ -13,7 +13,7 @@ export function errorMessage(error: unknown) {
     return localizeErrorText(error.message)
   }
 
-  return "Operation impossible"
+  return "Opération impossible"
 }
 
 function localizeErrorText(message: string, code?: string) {
@@ -41,27 +41,27 @@ function fallbackMessage(code?: string) {
     case "bad_request":
       return "La demande est invalide"
     case "conflict":
-      return "Cette action entre en conflit avec les donnees existantes"
+      return "Cette action entre en conflit avec les données existantes"
     case "forbidden":
-      return "Vous n'avez pas les droits necessaires"
+      return "Vous n'avez pas les droits nécessaires"
     case "not_found":
       return "Ressource introuvable"
     case "internal_error":
       return "Erreur interne du serveur"
     default:
-      return "Operation impossible"
+      return "Opération impossible"
   }
 }
 
 const ENGLISH_ERROR_MESSAGES: Record<string, string> = {
   "Account is disabled": "Ce compte est suspendu",
-  "Admin role required": "Role administrateur requis",
+  "Admin role required": "Rôle administrateur requis",
   "Authentication required": "Authentification requise",
   "Failed to fetch": "Serveur Hospitalinator indisponible",
   "Internal server error": "Erreur interne du serveur",
   "Invalid credentials": "Identifiants invalides",
   "Resource not found": "Ressource introuvable",
-  "Service scope required": "Acces limite au service autorise",
+  "Service scope required": "Accès limité au service autorisé",
   "Unable to fetch address suggestions": "Suggestions d'adresse indisponibles",
 }
 

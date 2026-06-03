@@ -41,7 +41,7 @@ export function PatientFormFields({
   return (
     <div className="grid gap-3">
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label="Prenom" required>
+        <Field label="Prénom" required>
           <Input
             required
             value={form.firstName}
@@ -110,7 +110,7 @@ export function PatientFormFields({
             />
           </Field>
         </div>
-        <Field label="Telephone" required={administrativeRequired}>
+        <Field label="Téléphone" required={administrativeRequired}>
           <Input
             required={administrativeRequired}
             type="tel"

@@ -77,12 +77,12 @@ export function PrescriptionForm({
       <DialogHeader>
         <DialogTitle>Nouvelle prescription</DialogTitle>
         <DialogDescription className="sr-only">
-          Ajout d'une prescription medicamenteuse
+          Ajout d'une prescription médicamenteuse
         </DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Debut" required>
+        <Field label="Début" required>
           <DateTextInput
             required
             value={form.startDate}
@@ -114,13 +114,13 @@ export function PrescriptionForm({
             key={index}
             className="grid gap-2 rounded-3xl border bg-background p-4 shadow md:grid-cols-[minmax(0,1fr)_minmax(7rem,0.35fr)_minmax(9rem,0.45fr)_auto]"
           >
-            <Field label="Medicament" required>
+            <Field label="Médicament" required>
               <MedicineSearchInput
                 medication={medication}
                 onChange={(values) => updateMedication(index, values)}
               />
             </Field>
-            <Field label="Duree" required>
+            <Field label="Durée" required>
               <Input
                 required
                 min={1}
@@ -134,7 +134,7 @@ export function PrescriptionForm({
                 }
               />
             </Field>
-            <Field label="Unite" required>
+            <Field label="Unité" required>
               <Select
                 value={medication.durationUnit}
                 onValueChange={(durationUnit) =>
@@ -162,7 +162,7 @@ export function PrescriptionForm({
                 size="icon-sm"
                 disabled={form.medications.length === 1}
                 onClick={() => removeMedication(index)}
-                aria-label="Retirer ce medicament"
+                aria-label="Retirer ce médicament"
               >
                 <Trash2 className="size-4" />
               </Button>
@@ -174,7 +174,7 @@ export function PrescriptionForm({
       <div>
         <Button type="button" variant="outline" onClick={addMedication}>
           <Plus className="size-4" />
-          Ajouter un medicament
+          Ajouter un médicament
         </Button>
       </div>
 

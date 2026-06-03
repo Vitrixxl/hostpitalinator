@@ -850,7 +850,7 @@ export function PatientWorkspace({
       setPatientForm(patientToForm(updated));
       invalidatePatientWorkspaceSnapshot(patientId);
       onPatientChanged();
-    }, "Dossier patient enregistre");
+    }, "Dossier patient enregistré");
   }
 
   function handleOpenPlacementDialog() {
@@ -917,7 +917,7 @@ export function PatientWorkspace({
       invalidatePatientWorkspaceSnapshot(patientId);
       onPatientChanged();
       navigate(`/patients/${patientId}/entrance`);
-    }, "Nouvelle visite creee");
+    }, "Nouvelle visite créée");
   }
 
   async function handleSaveEntranceExam(event: FormEvent<HTMLFormElement>) {
@@ -932,7 +932,7 @@ export function PatientWorkspace({
       setHasCurrentEntranceExam(Boolean(saved.exam));
       invalidatePatientWorkspaceSnapshot(patientId);
       await loadEntranceExamHistory(true);
-    }, "Examen d'entree enregistre");
+    }, "Examen d'entrée enregistré");
   }
 
   async function handleArchivePatient() {
@@ -1024,7 +1024,7 @@ export function PatientWorkspace({
       }
 
       await loadWorkspace();
-    }, "Mesure supprimee");
+    }, "Mesure supprimée");
   }
 
   async function handleAddPrescription(event: FormEvent<HTMLFormElement>) {
@@ -1041,7 +1041,7 @@ export function PatientWorkspace({
 
         if (medicationInputs.some((medication) => !medication.medicineId)) {
           throw new Error(
-            "Selectionnez un medicament reference pour chaque ligne",
+            "Sélectionnez un médicament référence pour chaque ligne",
           );
         }
 
@@ -1196,7 +1196,7 @@ export function PatientWorkspace({
     await runAction(async () => {
       const result = await openMedicalDocument(documentId);
       setDocumentOpenPath(result.storagePath ?? "Aucun chemin de stockage");
-    }, "Reference document chargee");
+    }, "Référence document chargée");
   }
 
   async function handleDownloadDocument(document: MedicalDocument) {
@@ -1204,7 +1204,7 @@ export function PatientWorkspace({
       const response = await downloadMedicalDocument(document.id);
 
       if (!response.ok) {
-        throw new Error(`Telechargement refuse (${response.status})`);
+        throw new Error(`Téléchargement refusé (${response.status})`);
       }
 
       const blob = await response.blob();
@@ -1217,7 +1217,7 @@ export function PatientWorkspace({
         `${document.title}.bin`;
       anchor.click();
       URL.revokeObjectURL(url);
-    }, "Telechargement lance");
+    }, "Téléchargement lancé");
   }
 
   async function handleAddEvolution(event: FormEvent<HTMLFormElement>) {
@@ -1311,7 +1311,7 @@ export function PatientWorkspace({
   function showEntranceExamGateMessage() {
     setSuccess("");
     setError(
-      "Enregistrez l'examen d'entree de cette visite avant de modifier les donnees cliniques.",
+      "Enregistrez l'examen d'entrée de cette visite avant de modifier les données cliniques.",
     );
   }
 
@@ -1350,7 +1350,7 @@ export function PatientWorkspace({
   const quickActions: QuickAction[] = [
     {
       id: "create-current-prescription",
-      label: "Creer une prescription pour le patient en cours",
+      label: "Créer une prescription pour le patient en cours",
       run: handleOpenPrescriptionQuickAction,
     },
     {
@@ -1394,7 +1394,7 @@ export function PatientWorkspace({
                 <BellRing className="size-4" />
               </div>
               <div className="min-w-0">
-                <p className="font-medium">Dossier patient mis a jour</p>
+                <p className="font-medium">Dossier patient mis à jour</p>
                 <p className="mt-0.5 break-words text-muted-foreground">
                   {patientUpdateToast.detail}
                 </p>
@@ -1482,7 +1482,7 @@ export function PatientWorkspace({
       {documentOpenPath && (
         <AlertMessage
           tone="success"
-          message={`Reference: ${documentOpenPath}`}
+          message={`Référence: ${documentOpenPath}`}
         />
       )}
 
@@ -1671,7 +1671,7 @@ export function PatientWorkspace({
                   >
                     <SectionTitle
                       icon={Stethoscope}
-                      title="Synthese administrative"
+                      title="Synthèse administrative"
                       action={
                         <Button type="submit">
                           <Save className="size-4" />
@@ -1691,22 +1691,22 @@ export function PatientWorkspace({
                   </form>
 
                   <section className="space-y-4 rounded-3xl border bg-background p-4 shadow">
-                    <SectionTitle icon={Activity} title="Dernieres donnees" />
+                    <SectionTitle icon={Activity} title="Dernières données" />
                     <div className="grid gap-3 sm:grid-cols-2">
                       <ClinicalValue
-                        label="Temperature"
+                        label="Température"
                         value={
                           latestVital
                             ? `${latestVital.temperature.toFixed(1)} C`
-                            : "Non renseignee"
+                            : "Non renseignée"
                         }
                       />
                       <ClinicalValue
-                        label="Frequence cardiaque"
+                        label="Fréquence cardiaque"
                         value={
                           latestVital
                             ? `${latestVital.heartRate} bpm`
-                            : "Non renseignee"
+                            : "Non renseignée"
                         }
                       />
                       <ClinicalValue
@@ -1714,7 +1714,7 @@ export function PatientWorkspace({
                         value={
                           latestVital
                             ? `${latestVital.systolicBloodPressure}/${latestVital.diastolicBloodPressure}`
-                            : "Non renseignee"
+                            : "Non renseignée"
                         }
                       />
                       <ClinicalValue
@@ -1722,7 +1722,7 @@ export function PatientWorkspace({
                         value={
                           latestVital
                             ? `${latestVital.oxygenSaturation.toFixed(0)} %`
-                            : "Non renseignee"
+                            : "Non renseignée"
                         }
                       />
                     </div>
@@ -1784,7 +1784,7 @@ export function PatientWorkspace({
                   <div className="overflow-hidden rounded-3xl border bg-background p-4 shadow">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="font-heading text-sm font-medium">
-                        Releve des constantes
+                        Relevé des constantes
                       </h3>
                     </div>
                     <TooltipProvider>
@@ -1794,31 +1794,31 @@ export function PatientWorkspace({
                             <TableHead>Date</TableHead>
                             <MedicalColumnHead
                               label="T"
-                              tooltip="Temperature corporelle"
+                              tooltip="Température corporelle"
                             />
                             <MedicalColumnHead
                               label="FC"
-                              tooltip="Frequence cardiaque"
+                              tooltip="Fréquence cardiaque"
                             />
                             <MedicalColumnHead
                               label="TA"
-                              tooltip="Tension arterielle"
+                              tooltip="Tension artérielle"
                             />
                             <MedicalColumnHead
                               label="SpO2"
-                              tooltip="Saturation pulsee en oxygene"
+                              tooltip="Saturation pulsée en oxygène"
                             />
                             <MedicalColumnHead
                               label="Poids"
                               tooltip="Poids corporel"
                             />
                             <MedicalColumnHead
-                              label="Diurese"
-                              tooltip="Volume urinaire releve"
+                              label="Diurèse"
+                              tooltip="Volume urinaire relevé"
                             />
                             <MedicalColumnHead
                               label="Selles"
-                              tooltip="Date des dernieres selles"
+                              tooltip="Date des dernières selles"
                             />
                             <TableHead className="w-px px-1 text-right">
                               <span className="sr-only">Actions</span>
@@ -1937,7 +1937,7 @@ export function PatientWorkspace({
                         ) : null}
                         <div className="grid grid-cols-2 gap-2">
                           <NumberField
-                            label="Temperature"
+                            label="Température"
                             value={vitalForm.temperature}
                             onChange={(value) =>
                               setVitalForm((current) => ({
@@ -1998,7 +1998,7 @@ export function PatientWorkspace({
                           />
                         </div>
                         <NumberField
-                          label="Diurese"
+                          label="Diurèse"
                           required={false}
                           value={vitalForm.diuresis}
                           onChange={(value) =>
@@ -2008,7 +2008,7 @@ export function PatientWorkspace({
                             }))
                           }
                         />
-                        <Field label="Dernieres selles" required>
+                        <Field label="Dernières selles" required>
                           <DateTextInput
                             required
                             value={vitalForm.lastStoolDate}
@@ -2069,7 +2069,7 @@ export function PatientWorkspace({
                         Filtres
                       </div>
                       <div className="flex flex-wrap items-end gap-3">
-                        <Field label="Medicament">
+                        <Field label="Médicament">
                           <Input
                             className="w-52 max-w-full"
                             value={prescriptionFilters.medication}
@@ -2081,7 +2081,7 @@ export function PatientWorkspace({
                             }
                           />
                         </Field>
-                        <Field label="Debut min">
+                        <Field label="Début min">
                           <DateTextInput
                             className="w-40 max-w-full"
                             value={prescriptionFilters.startDateFrom}
@@ -2093,7 +2093,7 @@ export function PatientWorkspace({
                             }
                           />
                         </Field>
-                        <Field label="Debut max">
+                        <Field label="Début max">
                           <DateTextInput
                             className="w-40 max-w-full"
                             value={prescriptionFilters.startDateTo}
@@ -2123,8 +2123,8 @@ export function PatientWorkspace({
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Medicament</TableHead>
-                            <TableHead>Debut</TableHead>
+                            <TableHead>Médicament</TableHead>
+                            <TableHead>Début</TableHead>
                             <TableHead>Fin</TableHead>
                             <TableHead>Statut</TableHead>
                           </TableRow>
@@ -2360,7 +2360,7 @@ export function PatientWorkspace({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Prelevement</TableHead>
+                          <TableHead>Prélèvement</TableHead>
                           <TableHead>Bilan</TableHead>
                           <TableHead>Valeurs</TableHead>
                           <TableHead>Apercu</TableHead>
@@ -2467,7 +2467,7 @@ export function PatientWorkspace({
                           <div className="text-xs text-muted-foreground">
                             {document.originalFileName ??
                               document.storagePath ??
-                              "Reference"}
+                              "Référence"}
                             {document.fileSizeBytes
                               ? ` · ${formatFileSize(document.fileSizeBytes)}`
                               : ""}
@@ -2541,7 +2541,7 @@ export function PatientWorkspace({
                         </SelectContent>
                       </Select>
                     </Field>
-                    <Field label="Reference fichier">
+                    <Field label="Référence fichier">
                       <Input
                         value={documentForm.storagePath}
                         onChange={(event) =>
@@ -2773,7 +2773,7 @@ export function PatientWorkspace({
                                   )}
                                 </div>
                               ) : (
-                                <EmptyState label="Aucune constante selectionnee" />
+                                <EmptyState label="Aucune constante sélectionnée" />
                               )}
                             </section>
                           </div>
@@ -2823,11 +2823,11 @@ function buildVitalChartPanels(
   return [
     {
       id: "temperature",
-      title: "Temperature",
+      title: "Température",
       latestValue: latestVital
         ? `${latestVital.temperature.toFixed(1)} C`
-        : "Non renseignee",
-      emptyLabel: "Aucune temperature renseignee",
+        : "Non renseignée",
+      emptyLabel: "Aucune température renseignée",
       data: vitalChartData.map((point) => ({
         label: point.label,
         value: point.temperature,
@@ -2835,7 +2835,7 @@ function buildVitalChartPanels(
       lines: [
         {
           dataKey: "value",
-          name: "Temperature",
+          name: "Température",
           stroke: "var(--chart-4)",
           unit: "C",
           decimals: 1,
@@ -2844,11 +2844,11 @@ function buildVitalChartPanels(
     },
     {
       id: "heart-rate",
-      title: "Frequence cardiaque",
+      title: "Fréquence cardiaque",
       latestValue: latestVital
         ? `${latestVital.heartRate} bpm`
-        : "Non renseignee",
-      emptyLabel: "Aucune frequence renseignee",
+        : "Non renseignée",
+      emptyLabel: "Aucune fréquence renseignée",
       data: vitalChartData.map((point) => ({
         label: point.label,
         value: point.heartRate,
@@ -2865,11 +2865,11 @@ function buildVitalChartPanels(
     },
     {
       id: "blood-pressure",
-      title: "Tension arterielle",
+      title: "Tension artérielle",
       latestValue: latestVital
         ? `${latestVital.systolicBloodPressure}/${latestVital.diastolicBloodPressure} mmHg`
-        : "Non renseignee",
-      emptyLabel: "Aucune tension renseignee",
+        : "Non renseignée",
+      emptyLabel: "Aucune tension renseignée",
       data: vitalChartData.map((point) => ({
         label: point.label,
         systolic: point.systolicBloodPressure,
@@ -2899,8 +2899,8 @@ function buildVitalChartPanels(
       title: "SpO2",
       latestValue: latestVital
         ? `${latestVital.oxygenSaturation.toFixed(0)} %`
-        : "Non renseignee",
-      emptyLabel: "Aucune SpO2 renseignee",
+        : "Non renseignée",
+      emptyLabel: "Aucune SpO2 renseignée",
       data: vitalChartData.map((point) => ({
         label: point.label,
         value: point.oxygenSaturation,
@@ -2920,8 +2920,8 @@ function buildVitalChartPanels(
       title: "Poids",
       latestValue: latestVital
         ? `${latestVital.weight.toFixed(1)} kg`
-        : "Non renseigne",
-      emptyLabel: "Aucun poids renseigne",
+        : "Non renseigné",
+      emptyLabel: "Aucun poids renseigné",
       data: vitalChartData.map((point) => ({
         label: point.label,
         value: point.weight,
@@ -2938,12 +2938,12 @@ function buildVitalChartPanels(
     },
     {
       id: "diuresis",
-      title: "Diurese",
+      title: "Diurèse",
       latestValue:
         latestVital?.diuresis != null
           ? `${latestVital.diuresis} ml`
-          : "Non renseignee",
-      emptyLabel: "Aucune diurese renseignee",
+          : "Non renseignée",
+      emptyLabel: "Aucune diurèse renseignée",
       data: vitalChartData.map((point) => ({
         label: point.label,
         value: point.diuresis,
@@ -2951,7 +2951,7 @@ function buildVitalChartPanels(
       lines: [
         {
           dataKey: "value",
-          name: "Diurese",
+          name: "Diurèse",
           stroke: "var(--chart-2)",
           unit: "ml",
           decimals: 0,
