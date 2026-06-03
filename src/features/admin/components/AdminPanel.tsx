@@ -1,19 +1,23 @@
-import { useCallback, useEffect, useState } from "react"
-import type { FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import type { FormEvent, ReactNode } from "react"
 import {
+  ArrowLeft,
   Ban,
   BedIcon,
   Building2,
   KeyRound,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
+  Search,
   ShieldCheck,
   Trash2,
   UserCog,
   UserPlus,
   Users,
 } from "lucide-react"
+import { Navigate, useLocation, useNavigate } from "react-router"
 
 import {
   assignRole,
@@ -22,12 +26,12 @@ import {
   createRoom,
   createService,
   deleteBed,
-  deleteRoom,
   deleteService,
   disableAccount,
   getAccount,
   listAccounts,
   listBeds,
+  listPatients,
   listRooms,
   listServices,
   resetAccountPassword,
@@ -41,9 +45,7 @@ import { errorMessage } from "@/app/error-utils"
 import {
   accountToForm,
   bedFormToInput,
-  bedToForm,
   emptyAccountForm,
-  emptyBedForm,
   emptyRoomForm,
   emptyServiceForm,
   roomFormToInput,
@@ -52,7 +54,6 @@ import {
 } from "@/app/form-state"
 import type {
   AccountFormState,
-  BedFormState,
   RoomFormState,
   ServiceFormState,
 } from "@/app/types"
@@ -78,22 +79,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { Account, Bed, Room, Service, UserRole } from "@/types"
+import { cn } from "@/lib/utils"
+import type { Account, Bed, Patient, Room, Service, UserRole } from "@/types"
+
+const ALL_SERVICES = "__all_services__"
+const ALL_ROLES = "__all_roles__"
+
+type AdminView =
+  | { type: "home" }
+  | { type: "personnel" }
+  | { type: "rooms" }
+  | { type: "room-edit"; roomId: string }
+  | { type: "services" }
+  | { type: "service-detail"; serviceId: string }
+  | { type: "service-room-edit"; serviceId: string; roomId: string }
+  | { type: "unknown" }
 
 export function AdminPanel({
   onCatalogChanged,
 }: {
   onCatalogChanged: () => void
 }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const view = parseAdminView(location.pathname)
+
   const [accounts, setAccounts] = useState<Account[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [beds, setBeds] = useState<Bed[]>([])
+  const [patients, setPatients] = useState<Patient[]>([])
   const [includeDisabled, setIncludeDisabled] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
-  const [selectedBedId, setSelectedBedId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<AccountFormState>(
     emptyAccountForm()
   )
@@ -101,35 +118,60 @@ export function AdminPanel({
   const [createServiceForm, setCreateServiceForm] = useState<ServiceFormState>(
     emptyServiceForm()
   )
-  const [editServiceForm, setEditServiceForm] = useState<ServiceFormState>(
-    emptyServiceForm()
-  )
   const [createRoomForm, setCreateRoomForm] = useState<RoomFormState>(
     emptyRoomForm()
   )
-  const [editRoomForm, setEditRoomForm] = useState<RoomFormState>(
+  const [roomEditForm, setRoomEditForm] = useState<RoomFormState>(
     emptyRoomForm()
   )
-  const [createBedForm, setCreateBedForm] = useState<BedFormState>(
-    emptyBedForm()
-  )
-  const [editBedForm, setEditBedForm] = useState<BedFormState>(emptyBedForm())
+  const [roomBedLabels, setRoomBedLabels] = useState<string[]>([])
+  const [personnelSearch, setPersonnelSearch] = useState("")
+  const [personnelService, setPersonnelService] = useState(ALL_SERVICES)
+  const [personnelRole, setPersonnelRole] = useState(ALL_ROLES)
   const [generatedPassword, setGeneratedPassword] = useState("")
   const [loading, setLoading] = useState(true)
   const [catalogLoading, setCatalogLoading] = useState(true)
+  const [patientLoading, setPatientLoading] = useState(true)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
+  const defaultServiceName = services[0]?.name ?? ""
   const selectedAccount = accounts.find(
     (account) => account.id === selectedAccountId
   )
-  const selectedService = services.find(
-    (service) => service.id === selectedServiceId
+  const activeService =
+    view.type === "service-detail" || view.type === "service-room-edit"
+      ? services.find((service) => service.id === view.serviceId)
+      : null
+  const editedRoom =
+    view.type === "room-edit" || view.type === "service-room-edit"
+      ? rooms.find((room) => room.id === view.roomId)
+      : null
+  const editedRoomBeds = useMemo(
+    () =>
+      editedRoom
+        ? beds
+            .filter((bed) => bed.roomId === editedRoom.id)
+            .sort(compareBeds)
+        : [],
+    [beds, editedRoom]
   )
-  const selectedRoom = rooms.find((room) => room.id === selectedRoomId)
-  const selectedBed = beds.find((bed) => bed.id === selectedBedId)
-  const defaultServiceName = services[0]?.name ?? ""
-  const defaultRoomId = rooms[0]?.id ?? ""
+  const filteredAccounts = useMemo(() => {
+    const query = personnelSearch.trim().toLocaleLowerCase()
+
+    return accounts.filter((account) => {
+      const matchesSearch =
+        !query ||
+        account.name.toLocaleLowerCase().includes(query) ||
+        account.email.toLocaleLowerCase().includes(query)
+      const matchesService =
+        personnelService === ALL_SERVICES || account.service === personnelService
+      const matchesRole =
+        personnelRole === ALL_ROLES || account.role === personnelRole
+
+      return matchesSearch && matchesService && matchesRole
+    })
+  }, [accounts, personnelRole, personnelSearch, personnelService])
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
@@ -163,44 +205,19 @@ export function AdminPanel({
         listBeds(),
       ])
       const firstServiceName = serviceResult[0]?.name ?? ""
-      const firstRoomId = roomResult[0]?.id ?? ""
       setServices(serviceResult)
       setRooms(roomResult)
       setBeds(bedResult)
-      if (firstServiceName) {
-        setCreateForm((current) =>
-          current.service ? current : { ...current, service: firstServiceName }
-        )
-        setCreateRoomForm((current) =>
-          current.service ? current : { ...current, service: firstServiceName }
-        )
-      }
-      if (firstRoomId) {
-        setCreateBedForm((current) =>
-          current.roomId ? current : { ...current, roomId: firstRoomId }
-        )
-      }
-      setSelectedServiceId((current) => {
-        if (current && serviceResult.some((service) => service.id === current)) {
-          return current
-        }
-
-        return serviceResult[0]?.id ?? null
-      })
-      setSelectedRoomId((current) => {
-        if (current && roomResult.some((room) => room.id === current)) {
-          return current
-        }
-
-        return roomResult[0]?.id ?? null
-      })
-      setSelectedBedId((current) => {
-        if (current && bedResult.some((bed) => bed.id === current)) {
-          return current
-        }
-
-        return bedResult[0]?.id ?? null
-      })
+      setCreateForm((current) =>
+        current.service || !firstServiceName
+          ? current
+          : { ...current, service: firstServiceName }
+      )
+      setCreateRoomForm((current) =>
+        current.service || !firstServiceName
+          ? current
+          : { ...current, service: firstServiceName }
+      )
     } catch (loadError) {
       setError(errorMessage(loadError))
     } finally {
@@ -208,19 +225,34 @@ export function AdminPanel({
     }
   }, [])
 
+  const loadPatients = useCallback(async () => {
+    setPatientLoading(true)
+
+    try {
+      setPatients(await listPatients())
+    } catch (loadError) {
+      setError(errorMessage(loadError))
+    } finally {
+      setPatientLoading(false)
+    }
+  }, [])
+
+  const refreshAll = useCallback(() => {
+    void loadAccounts()
+    void loadCatalog()
+    void loadPatients()
+  }, [loadAccounts, loadCatalog, loadPatients])
+
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadAccounts()
-      void loadCatalog()
-    }, 0)
+    const timeout = window.setTimeout(refreshAll, 0)
 
     return () => window.clearTimeout(timeout)
-  }, [loadAccounts, loadCatalog])
+  }, [refreshAll])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if (!selectedAccountId) {
-        setEditForm(emptyAccountForm())
+        setEditForm(emptyAccountForm(defaultServiceName))
         return
       }
 
@@ -230,41 +262,29 @@ export function AdminPanel({
     }, 0)
 
     return () => window.clearTimeout(timeout)
-  }, [selectedAccountId])
+  }, [defaultServiceName, selectedAccountId])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      setEditServiceForm(
-        selectedService ? serviceToForm(selectedService) : emptyServiceForm()
+      if (!editedRoom) {
+        setRoomEditForm(emptyRoomForm(defaultServiceName))
+        setRoomBedLabels([])
+        return
+      }
+
+      setRoomEditForm(roomToForm(editedRoom))
+      setRoomBedLabels(
+        editedRoomBeds.map((bed, index) => bed.label || `${index + 1}`)
       )
     }, 0)
 
     return () => window.clearTimeout(timeout)
-  }, [selectedService])
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setEditRoomForm(
-        selectedRoom ? roomToForm(selectedRoom) : emptyRoomForm(defaultServiceName)
-      )
-    }, 0)
-
-    return () => window.clearTimeout(timeout)
-  }, [defaultServiceName, selectedRoom])
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setEditBedForm(
-        selectedBed ? bedToForm(selectedBed) : emptyBedForm(defaultRoomId)
-      )
-    }, 0)
-
-    return () => window.clearTimeout(timeout)
-  }, [defaultRoomId, selectedBed])
+  }, [defaultServiceName, editedRoom, editedRoomBeds])
 
   async function runAdminAction(action: () => Promise<void>, okMessage: string) {
     setError("")
     setSuccess("")
+    setGeneratedPassword("")
 
     try {
       await action()
@@ -289,135 +309,6 @@ export function AdminPanel({
       await loadAccounts()
       setSelectedAccountId(result.account.id)
     }, "Compte créé")
-  }
-
-  async function handleCreateService(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await runAdminAction(async () => {
-      const service = await createService({ name: createServiceForm.name })
-      setCreateServiceForm(emptyServiceForm())
-      await loadCatalog()
-      onCatalogChanged()
-      setSelectedServiceId(service.id)
-    }, "Service créé")
-  }
-
-  async function handleUpdateService(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!selectedServiceId) {
-      return
-    }
-
-    await runAdminAction(async () => {
-      await updateService(selectedServiceId, { name: editServiceForm.name })
-      await Promise.all([loadCatalog(), loadAccounts()])
-      onCatalogChanged()
-    }, "Service mis à jour")
-  }
-
-  async function handleDeleteService() {
-    if (!selectedService) {
-      return
-    }
-
-    const confirmed = window.confirm(`Supprimer le service ${selectedService.name} ?`)
-
-    if (!confirmed) {
-      return
-    }
-
-    await runAdminAction(async () => {
-      await deleteService(selectedService.id)
-      await loadCatalog()
-      onCatalogChanged()
-    }, "Service supprimé")
-  }
-
-  async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await runAdminAction(async () => {
-      const room = await createRoom(roomFormToInput(createRoomForm))
-      setCreateRoomForm(emptyRoomForm(defaultServiceName))
-      await loadCatalog()
-      onCatalogChanged()
-      setSelectedRoomId(room.id)
-    }, "Chambre créée")
-  }
-
-  async function handleUpdateRoom(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!selectedRoomId) {
-      return
-    }
-
-    await runAdminAction(async () => {
-      await updateRoom(selectedRoomId, roomFormToInput(editRoomForm))
-      await loadCatalog()
-      onCatalogChanged()
-    }, "Chambre mise a jour")
-  }
-
-  async function handleDeleteRoom() {
-    if (!selectedRoom) {
-      return
-    }
-
-    const confirmed = window.confirm(`Supprimer la chambre ${selectedRoom.label} ?`)
-
-    if (!confirmed) {
-      return
-    }
-
-    await runAdminAction(async () => {
-      await deleteRoom(selectedRoom.id)
-      await loadCatalog()
-      onCatalogChanged()
-    }, "Chambre supprimée")
-  }
-
-  async function handleCreateBed(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await runAdminAction(async () => {
-      const bed = await createBed(bedFormToInput(createBedForm))
-      setCreateBedForm(emptyBedForm(defaultRoomId))
-      await loadCatalog()
-      onCatalogChanged()
-      setSelectedBedId(bed.id)
-    }, "Lit créé")
-  }
-
-  async function handleUpdateBed(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!selectedBedId) {
-      return
-    }
-
-    await runAdminAction(async () => {
-      await updateBed(selectedBedId, bedFormToInput(editBedForm))
-      await loadCatalog()
-      onCatalogChanged()
-    }, "Lit mis à jour")
-  }
-
-  async function handleDeleteBed() {
-    if (!selectedBed) {
-      return
-    }
-
-    const confirmed = window.confirm(`Supprimer le lit ${selectedBed.label} ?`)
-
-    if (!confirmed) {
-      return
-    }
-
-    await runAdminAction(async () => {
-      await deleteBed(selectedBed.id)
-      await loadCatalog()
-      onCatalogChanged()
-    }, "Lit supprimé")
   }
 
   async function handleUpdateAccount(event: FormEvent<HTMLFormElement>) {
@@ -446,7 +337,7 @@ export function AdminPanel({
     await runAdminAction(async () => {
       await assignRole(selectedAccountId, editForm.role)
       await loadAccounts()
-    }, "Rôle affecté")
+    }, "Poste affecté")
   }
 
   async function handleDisableAccount() {
@@ -472,47 +363,159 @@ export function AdminPanel({
     }, "Mot de passe régénéré")
   }
 
+  async function handleCreateService(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runAdminAction(async () => {
+      const service = await createService({ name: createServiceForm.name })
+      setCreateServiceForm(emptyServiceForm())
+      await loadCatalog()
+      onCatalogChanged()
+      navigate(`/admin/services/${service.id}`)
+    }, "Service créé")
+  }
+
+  async function handleUpdateService(
+    event: FormEvent<HTMLFormElement>,
+    service: Service,
+    form: ServiceFormState
+  ) {
+    event.preventDefault()
+    await runAdminAction(async () => {
+      await updateService(service.id, { name: form.name })
+      await Promise.all([loadCatalog(), loadAccounts(), loadPatients()])
+      onCatalogChanged()
+    }, "Service mis à jour")
+  }
+
+  async function handleDeleteService(service: Service) {
+    const confirmed = window.confirm(`Supprimer le service ${service.name} ?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    await runAdminAction(async () => {
+      await deleteService(service.id)
+      await loadCatalog()
+      onCatalogChanged()
+      navigate("/admin/services")
+    }, "Service supprimé")
+  }
+
+  async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await runAdminAction(async () => {
+      const room = await createRoom(roomFormToInput(createRoomForm))
+      setCreateRoomForm(emptyRoomForm(defaultServiceName))
+      await loadCatalog()
+      onCatalogChanged()
+      navigate(`/admin/chambres/${room.id}`)
+    }, "Chambre créée")
+  }
+
+  async function handleSaveRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!editedRoom) {
+      return
+    }
+
+    await runAdminAction(async () => {
+      const desiredLabels = roomBedLabels.map((label, index) => {
+        const trimmed = label.trim()
+        return trimmed || `${index + 1}`
+      })
+      const existingBeds = editedRoomBeds
+      const removedBeds = existingBeds.slice(desiredLabels.length)
+      const occupiedRemovedBed = removedBeds.find((bed) => bed.occupiedPatientId)
+
+      if (occupiedRemovedBed) {
+        throw new Error(
+          `Impossible de supprimer le lit ${occupiedRemovedBed.label}: un patient y est assigné`
+        )
+      }
+
+      await updateRoom(editedRoom.id, roomFormToInput(roomEditForm))
+
+      await Promise.all(
+        desiredLabels.slice(0, existingBeds.length).map((label, index) => {
+          const bed = existingBeds[index]
+          return updateBed(
+            bed.id,
+            bedFormToInput({
+              label,
+              roomId: editedRoom.id,
+              sortOrder: `${index + 1}`,
+            })
+          )
+        })
+      )
+
+      await Promise.all(
+        desiredLabels.slice(existingBeds.length).map((label, index) =>
+          createBed({
+            label,
+            roomId: editedRoom.id,
+            sortOrder: existingBeds.length + index + 1,
+          })
+        )
+      )
+
+      for (const bed of removedBeds.reverse()) {
+        await deleteBed(bed.id)
+      }
+
+      await loadCatalog()
+      onCatalogChanged()
+    }, "Chambre mise à jour")
+  }
+
+  function setRoomBedCount(nextCount: number) {
+    const count = Number.isFinite(nextCount) ? Math.max(0, nextCount) : 0
+    setRoomBedLabels((current) => {
+      if (count <= current.length) {
+        return current.slice(0, count)
+      }
+
+      return [
+        ...current,
+        ...Array.from({ length: count - current.length }, (_, index) =>
+          `${current.length + index + 1}`
+        ),
+      ]
+    })
+  }
+
+  const adminActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="flex h-9 items-center gap-2 rounded-full border bg-background px-3 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          className="size-4 rounded border-input"
+          checked={includeDisabled}
+          onChange={(event) => setIncludeDisabled(event.target.checked)}
+        />
+        Suspendus
+      </label>
+      <Button type="button" variant="outline" onClick={refreshAll}>
+        <RefreshCw
+          className={cn(
+            "size-4",
+            (loading || catalogLoading || patientLoading) && "animate-spin"
+          )}
+        />
+        Actualiser
+      </Button>
+    </div>
+  )
+
+  if (view.type === "unknown") {
+    return <Navigate to="/admin" replace />
+  }
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="font-heading text-2xl font-medium">
-            Administration
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {accounts.length} compte{accounts.length > 1 ? "s" : ""} ·{" "}
-            {services.length} service{services.length > 1 ? "s" : ""} ·{" "}
-            {rooms.length} chambre{rooms.length > 1 ? "s" : ""} ·{" "}
-            {beds.length} lit{beds.length > 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className="size-4 rounded border-input"
-              checked={includeDisabled}
-              onChange={(event) => setIncludeDisabled(event.target.checked)}
-            />
-            Inclure suspendus
-          </label>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              void loadAccounts()
-              void loadCatalog()
-            }}
-          >
-            <RefreshCw
-              className={
-                loading || catalogLoading ? "size-4 animate-spin" : "size-4"
-              }
-            />
-            Actualiser
-          </Button>
-        </div>
-      </div>
+      <AdminHeader actions={adminActions} view={view} />
 
       {error && <AlertMessage message={error} />}
       {success && <AlertMessage tone="success" message={success} />}
@@ -523,293 +526,369 @@ export function AdminPanel({
         />
       )}
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-3xl border bg-background p-4 shadow">
-          <SectionTitle icon={Building2} title="Services" />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>Comptes</TableHead>
-                <TableHead>Chambres</TableHead>
-                <TableHead>Lits</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {services.map((service) => (
-                <TableRow
-                  key={service.id}
-                  className={
-                    selectedServiceId === service.id ? "bg-primary/5" : ""
-                  }
-                  onClick={() => setSelectedServiceId(service.id)}
-                >
-                  <TableCell>{service.name}</TableCell>
-                  <TableCell>
-                    {
-                      accounts.filter((account) => account.service === service.name)
-                        .length
-                    }
-                  </TableCell>
-                  <TableCell>
-                    {rooms.filter((room) => room.service === service.name).length}
-                  </TableCell>
-                  <TableCell>
-                    {beds.filter((bed) => bed.service === service.name).length}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {services.length === 0 && <EmptyState label="Aucun service" />}
-        </div>
+      {view.type === "home" && (
+        <AdminHome
+          accounts={accounts}
+          beds={beds}
+          patients={patients}
+          rooms={rooms}
+          services={services}
+          onOpen={(path) => navigate(path)}
+        />
+      )}
 
-        <div className="space-y-4">
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleCreateService}
+      {view.type === "personnel" && (
+        <PersonnelPage
+          accounts={accounts}
+          createForm={createForm}
+          editForm={editForm}
+          filteredAccounts={filteredAccounts}
+          includeDisabled={includeDisabled}
+          loading={loading}
+          personnelRole={personnelRole}
+          personnelSearch={personnelSearch}
+          personnelService={personnelService}
+          selectedAccount={selectedAccount}
+          selectedAccountId={selectedAccountId}
+          services={services}
+          onAssignRole={() => void handleAssignRole()}
+          onCreateAccount={(event) => void handleCreateAccount(event)}
+          onDisableAccount={() => void handleDisableAccount()}
+          onResetPassword={() => void handleResetPassword()}
+          onSelectAccount={setSelectedAccountId}
+          onSetCreateForm={setCreateForm}
+          onSetEditForm={setEditForm}
+          onSetPersonnelRole={setPersonnelRole}
+          onSetPersonnelSearch={setPersonnelSearch}
+          onSetPersonnelService={setPersonnelService}
+          onUpdateAccount={(event) => void handleUpdateAccount(event)}
+        />
+      )}
+
+      {view.type === "rooms" && (
+        <RoomsPage
+          beds={beds}
+          createRoomForm={createRoomForm}
+          rooms={rooms}
+          services={services}
+          onCreateRoom={(event) => void handleCreateRoom(event)}
+          onEditRoom={(roomId) => navigate(`/admin/chambres/${roomId}`)}
+          onSetCreateRoomForm={setCreateRoomForm}
+        />
+      )}
+
+      {(view.type === "room-edit" || view.type === "service-room-edit") && (
+        <RoomEditorPage
+          bedLabels={roomBedLabels}
+          beds={editedRoomBeds}
+          form={roomEditForm}
+          room={editedRoom}
+          services={services}
+          onBack={() => navigate(-1)}
+          onBedCountChange={setRoomBedCount}
+          onBedLabelChange={(index, label) =>
+            setRoomBedLabels((current) =>
+              current.map((currentLabel, currentIndex) =>
+                currentIndex === index ? label : currentLabel
+              )
+            )
+          }
+          onChange={setRoomEditForm}
+          onSubmit={(event) => void handleSaveRoom(event)}
+        />
+      )}
+
+      {view.type === "services" && (
+        <ServicesPage
+          accounts={accounts}
+          beds={beds}
+          createServiceForm={createServiceForm}
+          patients={patients}
+          rooms={rooms}
+          services={services}
+          onCreateService={(event) => void handleCreateService(event)}
+          onOpenService={(serviceId) => navigate(`/admin/services/${serviceId}`)}
+          onSetCreateServiceForm={setCreateServiceForm}
+        />
+      )}
+
+      {view.type === "service-detail" && (
+        <ServiceDetailPage
+          accounts={accounts}
+          beds={beds}
+          patients={patients}
+          rooms={rooms}
+          service={activeService}
+          onBack={() => navigate("/admin/services")}
+          onDeleteService={(service) => void handleDeleteService(service)}
+          onEditRoom={(roomId) =>
+            navigate(`/admin/services/${activeService?.id}/chambres/${roomId}`)
+          }
+          onUpdateService={(event, service, form) =>
+            void handleUpdateService(event, service, form)
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+function AdminHeader({
+  actions,
+  view,
+}: {
+  actions: ReactNode
+  view: AdminView
+}) {
+  const navigate = useNavigate()
+  const title =
+    view.type === "personnel"
+      ? "Personnel"
+      : view.type === "rooms" || view.type === "room-edit"
+        ? "Chambres"
+        : view.type === "services" ||
+            view.type === "service-detail" ||
+            view.type === "service-room-edit"
+          ? "Services"
+          : "Administration"
+
+  return (
+    <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        {view.type !== "home" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            onClick={() => navigate("/admin")}
+            aria-label="Retour à l'administration"
           >
-            <SectionTitle icon={Plus} title="Nouveau service" />
-            <Field label="Nom" required>
+            <ArrowLeft className="size-4" />
+          </Button>
+        )}
+        <div className="min-w-0">
+          <h2 className="truncate font-heading text-2xl font-medium">
+            {title}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Gestion opérationnelle de l'hôpital
+          </p>
+        </div>
+      </div>
+      {actions}
+    </div>
+  )
+}
+
+function AdminHome({
+  accounts,
+  beds,
+  patients,
+  rooms,
+  services,
+  onOpen,
+}: {
+  accounts: Account[]
+  beds: Bed[]
+  patients: Patient[]
+  rooms: Room[]
+  services: Service[]
+  onOpen: (path: string) => void
+}) {
+  const occupiedBeds = beds.filter((bed) => bed.occupiedPatientId).length
+  const activePatients = patients.filter((patient) => patient.currentVisitId).length
+
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      <AdminLandingCard
+        icon={Users}
+        title="Personnel"
+        detail={`${accounts.length} membre${accounts.length > 1 ? "s" : ""}`}
+        stats={[
+          `${services.length} service${services.length > 1 ? "s" : ""}`,
+          `${accounts.filter((account) => account.status === "active").length} actifs`,
+        ]}
+        onClick={() => onOpen("/admin/personnel")}
+      />
+      <AdminLandingCard
+        icon={BedIcon}
+        title="Chambres"
+        detail={`${rooms.length} chambre${rooms.length > 1 ? "s" : ""}`}
+        stats={[
+          `${occupiedBeds}/${beds.length} lits occupés`,
+          `${beds.length} lit${beds.length > 1 ? "s" : ""}`,
+        ]}
+        onClick={() => onOpen("/admin/chambres")}
+      />
+      <AdminLandingCard
+        icon={Building2}
+        title="Services"
+        detail={`${services.length} service${services.length > 1 ? "s" : ""}`}
+        stats={[
+          `${activePatients} patient${activePatients > 1 ? "s" : ""} en visite`,
+          `${rooms.length} chambres`,
+        ]}
+        onClick={() => onOpen("/admin/services")}
+      />
+    </div>
+  )
+}
+
+function AdminLandingCard({
+  detail,
+  icon: Icon,
+  onClick,
+  stats,
+  title,
+}: {
+  detail: string
+  icon: typeof Users
+  onClick: () => void
+  stats: string[]
+  title: string
+}) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-60 flex-col justify-between rounded-3xl border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      onClick={onClick}
+    >
+      <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <Icon className="size-7" />
+      </span>
+      <span>
+        <span className="block font-heading text-2xl font-medium">{title}</span>
+        <span className="mt-1 block text-sm text-muted-foreground">
+          {detail}
+        </span>
+      </span>
+      <span className="flex flex-wrap gap-2">
+        {stats.map((stat) => (
+          <Badge key={stat} variant="secondary">
+            {stat}
+          </Badge>
+        ))}
+      </span>
+    </button>
+  )
+}
+
+function PersonnelPage({
+  createForm,
+  editForm,
+  filteredAccounts,
+  loading,
+  personnelRole,
+  personnelSearch,
+  personnelService,
+  selectedAccount,
+  selectedAccountId,
+  services,
+  onAssignRole,
+  onCreateAccount,
+  onDisableAccount,
+  onResetPassword,
+  onSelectAccount,
+  onSetCreateForm,
+  onSetEditForm,
+  onSetPersonnelRole,
+  onSetPersonnelSearch,
+  onSetPersonnelService,
+  onUpdateAccount,
+}: {
+  accounts: Account[]
+  createForm: AccountFormState
+  editForm: AccountFormState
+  filteredAccounts: Account[]
+  includeDisabled: boolean
+  loading: boolean
+  personnelRole: string
+  personnelSearch: string
+  personnelService: string
+  selectedAccount: Account | undefined
+  selectedAccountId: string | null
+  services: Service[]
+  onAssignRole: () => void
+  onCreateAccount: (event: FormEvent<HTMLFormElement>) => void
+  onDisableAccount: () => void
+  onResetPassword: () => void
+  onSelectAccount: (accountId: string) => void
+  onSetCreateForm: (form: AccountFormState) => void
+  onSetEditForm: (form: AccountFormState) => void
+  onSetPersonnelRole: (role: string) => void
+  onSetPersonnelSearch: (search: string) => void
+  onSetPersonnelService: (service: string) => void
+  onUpdateAccount: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
+      <div className="rounded-3xl border bg-background p-4 shadow">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <SectionTitle icon={Users} title="Liste du personnel" />
+          <div className="grid gap-2 sm:grid-cols-3 lg:w-[44rem]">
+            <div className="flex h-9 min-w-0 items-center rounded-full border border-input/60 bg-background shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+              <Search className="ml-3 size-4 shrink-0 text-muted-foreground" />
               <Input
-                required
-                value={createServiceForm.name}
-                onChange={(event) =>
-                  setCreateServiceForm({ name: event.target.value })
-                }
+                className="h-full min-w-0 flex-1 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0 md:text-sm"
+                placeholder="Rechercher par nom"
+                value={personnelSearch}
+                onChange={(event) => onSetPersonnelSearch(event.target.value)}
               />
-            </Field>
-            <Button type="submit">
-              <Plus className="size-4" />
-              Créer
-            </Button>
-          </form>
-
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleUpdateService}
-          >
-            <SectionTitle icon={Building2} title="Service sélectionné" />
-            {selectedService ? (
-              <>
-                <Field label="Nom" required>
-                  <Input
-                    required
-                    value={editServiceForm.name}
-                    onChange={(event) =>
-                      setEditServiceForm({ name: event.target.value })
-                    }
-                  />
-                </Field>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button type="submit">
-                    <Save className="size-4" />
-                    Enregistrer
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => void handleDeleteService()}
-                  >
-                    <Trash2 className="size-4" />
-                    Supprimer
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <EmptyState label="Aucun service sélectionné" />
-            )}
-          </form>
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-3xl border bg-background p-4 shadow">
-          <SectionTitle icon={Building2} title="Chambres" />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Libellé</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Lits</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rooms.map((room) => (
-                <TableRow
-                  key={room.id}
-                  className={selectedRoomId === room.id ? "bg-primary/5" : ""}
-                  onClick={() => setSelectedRoomId(room.id)}
-                >
-                  <TableCell>{room.label}</TableCell>
-                  <TableCell>{room.service}</TableCell>
-                  <TableCell>
-                    {beds.filter((bed) => bed.roomId === room.id).length}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {rooms.length === 0 && <EmptyState label="Aucune chambre" />}
+            </div>
+            <Select
+              value={personnelService}
+              onValueChange={onSetPersonnelService}
+            >
+              <SelectTrigger className="h-9 max-w-full rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SERVICES}>Tous les services</SelectItem>
+                {services.map((service) => (
+                  <SelectItem key={service.id} value={service.name}>
+                    {service.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={personnelRole} onValueChange={onSetPersonnelRole}>
+              <SelectTrigger className="h-9 max-w-full rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_ROLES}>Tous les postes</SelectItem>
+                {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {ROLE_LABELS[role]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleCreateRoom}
-          >
-            <SectionTitle icon={Plus} title="Nouvelle chambre" />
-            <RoomFields
-              form={createRoomForm}
-              services={services}
-              onChange={setCreateRoomForm}
-            />
-            <Button type="submit" disabled={services.length === 0}>
-              <Plus className="size-4" />
-              Créer
-            </Button>
-          </form>
-
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleUpdateRoom}
-          >
-            <SectionTitle icon={Building2} title="Chambre sélectionnée" />
-            {selectedRoom ? (
-              <>
-                <RoomFields
-                  form={editRoomForm}
-                  services={services}
-                  onChange={setEditRoomForm}
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button type="submit">
-                    <Save className="size-4" />
-                    Enregistrer
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={beds.some((bed) => bed.roomId === selectedRoom.id)}
-                    onClick={() => void handleDeleteRoom()}
-                  >
-                    <Trash2 className="size-4" />
-                    Supprimer
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <EmptyState label="Aucune chambre sélectionnée" />
-            )}
-          </form>
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-3xl border bg-background p-4 shadow">
-          <SectionTitle icon={BedIcon} title="Lits" />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Libellé</TableHead>
-                <TableHead>Chambre</TableHead>
-                <TableHead>Service</TableHead>
-                <TableHead>Patient</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {beds.map((bed) => (
-                <TableRow
-                  key={bed.id}
-                  className={selectedBedId === bed.id ? "bg-primary/5" : ""}
-                  onClick={() => setSelectedBedId(bed.id)}
-                >
-                  <TableCell>{bed.label}</TableCell>
-                  <TableCell>{bed.room}</TableCell>
-                  <TableCell>{bed.service}</TableCell>
-                  <TableCell>{bed.occupiedPatientName ?? "-"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {beds.length === 0 && <EmptyState label="Aucun lit" />}
-        </div>
-
-        <div className="space-y-4">
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleCreateBed}
-          >
-            <SectionTitle icon={Plus} title="Nouveau lit" />
-            <BedFields
-              form={createBedForm}
-              rooms={rooms}
-              onChange={setCreateBedForm}
-            />
-            <Button type="submit" disabled={rooms.length === 0}>
-              <Plus className="size-4" />
-              Créer
-            </Button>
-          </form>
-
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleUpdateBed}
-          >
-            <SectionTitle icon={BedIcon} title="Lit sélectionné" />
-            {selectedBed ? (
-              <>
-                <BedFields
-                  form={editBedForm}
-                  rooms={rooms}
-                  onChange={setEditBedForm}
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button type="submit">
-                    <Save className="size-4" />
-                    Enregistrer
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={Boolean(selectedBed.occupiedPatientId)}
-                    onClick={() => void handleDeleteBed()}
-                  >
-                    <Trash2 className="size-4" />
-                    Supprimer
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <EmptyState label="Aucun lit sélectionné" />
-            )}
-          </form>
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="rounded-3xl border bg-background p-4 shadow">
-          <SectionTitle icon={Users} title="Utilisateurs" />
+        <div className="mt-4 overflow-hidden rounded-2xl border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nom</TableHead>
                 <TableHead>Courriel</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Poste</TableHead>
                 <TableHead>Service</TableHead>
                 <TableHead>Statut</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accounts.map((account) => (
+              {filteredAccounts.map((account) => (
                 <TableRow
                   key={account.id}
-                  className={
-                    selectedAccountId === account.id ? "bg-primary/5" : ""
-                  }
-                  onClick={() => setSelectedAccountId(account.id)}
+                  className={cn(
+                    "cursor-pointer",
+                    selectedAccountId === account.id && "bg-primary/5"
+                  )}
+                  onClick={() => onSelectAccount(account.id)}
                 >
-                  <TableCell>{account.name}</TableCell>
+                  <TableCell className="font-medium">{account.name}</TableCell>
                   <TableCell>{account.email}</TableCell>
                   <TableCell>{ROLE_LABELS[account.role]}</TableCell>
                   <TableCell>{account.service}</TableCell>
@@ -820,78 +899,600 @@ export function AdminPanel({
               ))}
             </TableBody>
           </Table>
-          {accounts.length === 0 && <EmptyState label="Aucun compte" />}
         </div>
+        {filteredAccounts.length === 0 && (
+          <EmptyState
+            label={loading ? "Chargement du personnel" : "Aucun membre trouvé"}
+          />
+        )}
+      </div>
 
-        <div className="space-y-4">
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleCreateAccount}
-          >
-            <SectionTitle icon={UserPlus} title="Nouveau compte" />
-            <AccountFields
-              form={createForm}
-              services={services}
-              onChange={setCreateForm}
-              invite
+      <div className="space-y-4">
+        <form
+          className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
+          onSubmit={onCreateAccount}
+        >
+          <SectionTitle icon={UserPlus} title="Nouveau membre" />
+          <AccountFields
+            form={createForm}
+            services={services}
+            onChange={onSetCreateForm}
+            invite
+          />
+          <Button type="submit" disabled={services.length === 0}>
+            <UserPlus className="size-4" />
+            Créer
+          </Button>
+        </form>
+
+        <form
+          className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
+          onSubmit={onUpdateAccount}
+        >
+          <SectionTitle icon={UserCog} title="Membre sélectionné" />
+          {selectedAccount ? (
+            <>
+              <AccountFields
+                form={editForm}
+                services={services}
+                onChange={onSetEditForm}
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button type="submit">
+                  <Save className="size-4" />
+                  Enregistrer
+                </Button>
+                <Button type="button" variant="outline" onClick={onAssignRole}>
+                  <ShieldCheck className="size-4" />
+                  Affecter poste
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onResetPassword}
+                >
+                  <KeyRound className="size-4" />
+                  Mot de passe
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={selectedAccount.status === "disabled"}
+                  onClick={onDisableAccount}
+                >
+                  <Ban className="size-4" />
+                  Suspendre
+                </Button>
+              </div>
+            </>
+          ) : (
+            <EmptyState label="Aucun membre sélectionné" />
+          )}
+        </form>
+      </div>
+    </section>
+  )
+}
+
+function RoomsPage({
+  beds,
+  createRoomForm,
+  rooms,
+  services,
+  onCreateRoom,
+  onEditRoom,
+  onSetCreateRoomForm,
+}: {
+  beds: Bed[]
+  createRoomForm: RoomFormState
+  rooms: Room[]
+  services: Service[]
+  onCreateRoom: (event: FormEvent<HTMLFormElement>) => void
+  onEditRoom: (roomId: string) => void
+  onSetCreateRoomForm: (form: RoomFormState) => void
+}) {
+  return (
+    <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
+      <AdminRoomGrid
+        beds={beds}
+        rooms={rooms}
+        serviceName=""
+        onEditRoom={onEditRoom}
+      />
+      <form
+        className="grid content-start gap-3 rounded-3xl border bg-background p-4 shadow"
+        onSubmit={onCreateRoom}
+      >
+        <SectionTitle icon={Plus} title="Nouvelle chambre" />
+        <RoomFields
+          form={createRoomForm}
+          services={services}
+          onChange={onSetCreateRoomForm}
+        />
+        <Button type="submit" disabled={services.length === 0}>
+          <Plus className="size-4" />
+          Créer
+        </Button>
+      </form>
+    </section>
+  )
+}
+
+function RoomEditorPage({
+  bedLabels,
+  beds,
+  form,
+  room,
+  services,
+  onBack,
+  onBedCountChange,
+  onBedLabelChange,
+  onChange,
+  onSubmit,
+}: {
+  bedLabels: string[]
+  beds: Bed[]
+  form: RoomFormState
+  room: Room | null | undefined
+  services: Service[]
+  onBack: () => void
+  onBedCountChange: (count: number) => void
+  onBedLabelChange: (index: number, label: string) => void
+  onChange: (form: RoomFormState) => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  if (!room) {
+    return <EmptyState label="Chambre introuvable" />
+  }
+
+  return (
+    <form
+      className="mx-auto grid max-w-3xl gap-4 rounded-3xl border bg-background p-4 shadow"
+      onSubmit={onSubmit}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SectionTitle icon={BedIcon} title={`Chambre ${room.label}`} />
+        <Button type="button" variant="outline" onClick={onBack}>
+          <ArrowLeft className="size-4" />
+          Retour
+        </Button>
+      </div>
+      <RoomFields form={form} services={services} onChange={onChange} />
+      <Field label="Nombre de lits" required>
+        <Input
+          required
+          type="number"
+          min="0"
+          step="1"
+          value={bedLabels.length}
+          onChange={(event) => onBedCountChange(Number(event.target.value))}
+        />
+      </Field>
+      <div className="grid gap-2">
+        {bedLabels.map((label, index) => {
+          const bed = beds[index]
+          const occupied = Boolean(bed?.occupiedPatientId)
+
+          return (
+            <Field
+              key={`${bed?.id ?? "new"}-${index}`}
+              label={`Nom du lit ${index + 1}${occupied ? " occupé" : ""}`}
+            >
+              <Input
+                value={label}
+                onChange={(event) => onBedLabelChange(index, event.target.value)}
+              />
+            </Field>
+          )
+        })}
+      </div>
+      <Button type="submit">
+        <Save className="size-4" />
+        Enregistrer la chambre
+      </Button>
+    </form>
+  )
+}
+
+function ServicesPage({
+  accounts,
+  beds,
+  createServiceForm,
+  patients,
+  rooms,
+  services,
+  onCreateService,
+  onOpenService,
+  onSetCreateServiceForm,
+}: {
+  accounts: Account[]
+  beds: Bed[]
+  createServiceForm: ServiceFormState
+  patients: Patient[]
+  rooms: Room[]
+  services: Service[]
+  onCreateService: (event: FormEvent<HTMLFormElement>) => void
+  onOpenService: (serviceId: string) => void
+  onSetCreateServiceForm: (form: ServiceFormState) => void
+}) {
+  return (
+    <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {services.map((service) => (
+          <ServiceCard
+            key={service.id}
+            accounts={accounts}
+            beds={beds}
+            patients={patients}
+            rooms={rooms}
+            service={service}
+            onClick={() => onOpenService(service.id)}
+          />
+        ))}
+        {services.length === 0 && <EmptyState label="Aucun service" />}
+      </div>
+      <form
+        className="grid content-start gap-3 rounded-3xl border bg-background p-4 shadow"
+        onSubmit={onCreateService}
+      >
+        <SectionTitle icon={Plus} title="Nouveau service" />
+        <Field label="Nom" required>
+          <Input
+            required
+            value={createServiceForm.name}
+            onChange={(event) =>
+              onSetCreateServiceForm({ name: event.target.value })
+            }
+          />
+        </Field>
+        <Button type="submit">
+          <Plus className="size-4" />
+          Créer
+        </Button>
+      </form>
+    </section>
+  )
+}
+
+function ServiceDetailPage({
+  accounts,
+  beds,
+  patients,
+  rooms,
+  service,
+  onBack,
+  onDeleteService,
+  onEditRoom,
+  onUpdateService,
+}: {
+  accounts: Account[]
+  beds: Bed[]
+  patients: Patient[]
+  rooms: Room[]
+  service: Service | null | undefined
+  onBack: () => void
+  onDeleteService: (service: Service) => void
+  onEditRoom: (roomId: string) => void
+  onUpdateService: (
+    event: FormEvent<HTMLFormElement>,
+    service: Service,
+    form: ServiceFormState
+  ) => void
+}) {
+  if (!service) {
+    return <EmptyState label="Service introuvable" />
+  }
+
+  return (
+    <ServiceDetailContent
+      key={`${service.id}:${service.name}`}
+      accounts={accounts}
+      beds={beds}
+      patients={patients}
+      rooms={rooms}
+      service={service}
+      onBack={onBack}
+      onDeleteService={onDeleteService}
+      onEditRoom={onEditRoom}
+      onUpdateService={onUpdateService}
+    />
+  )
+}
+
+function ServiceDetailContent({
+  accounts,
+  beds,
+  patients,
+  rooms,
+  service,
+  onBack,
+  onDeleteService,
+  onEditRoom,
+  onUpdateService,
+}: {
+  accounts: Account[]
+  beds: Bed[]
+  patients: Patient[]
+  rooms: Room[]
+  service: Service
+  onBack: () => void
+  onDeleteService: (service: Service) => void
+  onEditRoom: (roomId: string) => void
+  onUpdateService: (
+    event: FormEvent<HTMLFormElement>,
+    service: Service,
+    form: ServiceFormState
+  ) => void
+}) {
+  const [form, setForm] = useState<ServiceFormState>(() =>
+    serviceToForm(service)
+  )
+  const serviceRooms = rooms.filter((room) => room.service === service.name)
+  const serviceBeds = beds.filter((bed) => bed.service === service.name)
+  const serviceAccounts = accounts.filter(
+    (account) => account.service === service.name
+  )
+
+  return (
+    <div className="space-y-4">
+      <form
+        className="grid gap-4 rounded-3xl border bg-background p-4 shadow"
+        onSubmit={(event) => onUpdateService(event, service, form)}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle icon={Building2} title={service.name} />
+          <Button type="button" variant="outline" onClick={onBack}>
+            <ArrowLeft className="size-4" />
+            Services
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+          <Field label="Nom du service" required>
+            <Input
+              required
+              value={form.name}
+              onChange={(event) => setForm({ name: event.target.value })}
             />
-            <Button type="submit" disabled={services.length === 0}>
-              <UserPlus className="size-4" />
-              Créer
-            </Button>
-          </form>
-
-          <form
-            className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
-            onSubmit={handleUpdateAccount}
+          </Field>
+          <Button type="submit">
+            <Save className="size-4" />
+            Enregistrer
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => onDeleteService(service)}
           >
-            <SectionTitle icon={UserCog} title="Compte sélectionné" />
-            {selectedAccount ? (
-              <>
-                <AccountFields
-                  form={editForm}
-                  services={services}
-                  onChange={setEditForm}
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button type="submit">
-                    <Save className="size-4" />
-                    Enregistrer
-                  </Button>
+            <Trash2 className="size-4" />
+            Supprimer
+          </Button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-4">
+          <StatBox
+            label="Patients en visite"
+            value={servicePatientsInVisit(patients, service.name)}
+          />
+          <StatBox
+            label="Lits occupés"
+            value={`${occupiedBedCount(serviceBeds)}/${serviceBeds.length}`}
+          />
+          <StatBox label="Chambres" value={serviceRooms.length} />
+          <StatBox label="Personnel" value={serviceAccounts.length} />
+        </div>
+      </form>
+
+      <AdminRoomGrid
+        beds={serviceBeds}
+        rooms={serviceRooms}
+        serviceName={service.name}
+        onEditRoom={onEditRoom}
+      />
+
+      <div className="rounded-3xl border bg-background p-4 shadow">
+        <SectionTitle icon={Users} title="Personnel du service" />
+        <div className="mt-4 overflow-hidden rounded-2xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nom</TableHead>
+                <TableHead>Courriel</TableHead>
+                <TableHead>Poste</TableHead>
+                <TableHead>Statut</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {serviceAccounts.map((account) => (
+                <TableRow key={account.id}>
+                  <TableCell className="font-medium">{account.name}</TableCell>
+                  <TableCell>{account.email}</TableCell>
+                  <TableCell>{ROLE_LABELS[account.role]}</TableCell>
+                  <TableCell>
+                    <AccountStatusBadge status={account.status} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {serviceAccounts.length === 0 && (
+          <EmptyState label="Aucun personnel dans ce service" />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ServiceCard({
+  accounts,
+  beds,
+  patients,
+  rooms,
+  service,
+  onClick,
+}: {
+  accounts: Account[]
+  beds: Bed[]
+  patients: Patient[]
+  rooms: Room[]
+  service: Service
+  onClick: () => void
+}) {
+  const serviceBeds = beds.filter((bed) => bed.service === service.name)
+
+  return (
+    <button
+      type="button"
+      className="grid min-h-52 gap-4 rounded-3xl border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      onClick={onClick}
+    >
+      <span className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block truncate font-heading text-xl font-medium">
+            {service.name}
+          </span>
+          <span className="mt-1 block text-sm text-muted-foreground">
+            {rooms.filter((room) => room.service === service.name).length} chambres ·{" "}
+            {accounts.filter((account) => account.service === service.name).length} membres
+          </span>
+        </span>
+        <Building2 className="size-5 shrink-0 text-primary" />
+      </span>
+      <span className="grid gap-2 sm:grid-cols-2">
+        <StatBox
+          label="Patients en visite"
+          value={servicePatientsInVisit(patients, service.name)}
+        />
+        <StatBox
+          label="Lits occupés"
+          value={`${occupiedBedCount(serviceBeds)}/${serviceBeds.length}`}
+        />
+      </span>
+    </button>
+  )
+}
+
+function AdminRoomGrid({
+  beds,
+  rooms,
+  serviceName,
+  onEditRoom,
+}: {
+  beds: Bed[]
+  rooms: Room[]
+  serviceName: string
+  onEditRoom: (roomId: string) => void
+}) {
+  const groupedRooms = useMemo(() => groupRoomsWithBeds(rooms, beds), [beds, rooms])
+  const occupiedCount = beds.filter((bed) => bed.occupiedPatientId).length
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <BedIcon className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="font-heading text-xl font-medium">
+              Chambres{serviceName ? ` du service ${serviceName}` : ""}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {occupiedCount} lit{occupiedCount > 1 ? "s" : ""} occupé
+              {occupiedCount > 1 ? "s" : ""} sur {beds.length}.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {groupedRooms.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {groupedRooms.map((room) => (
+            <div
+              key={room.id}
+              className="flex min-h-56 flex-col rounded-2xl border bg-background p-4 shadow"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-heading text-lg font-medium">
+                    Chambre {room.label}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {room.service} · {room.beds.length} lit
+                    {room.beds.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="secondary">
+                    {room.beds.filter((bed) => bed.occupiedPatientId).length}/
+                    {room.beds.length}
+                  </Badge>
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => void handleAssignRole()}
+                    size="icon-lg"
+                    onClick={() => onEditRoom(room.id)}
+                    aria-label={`Modifier la chambre ${room.label}`}
                   >
-                    <ShieldCheck className="size-4" />
-                    Affecter role
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleResetPassword()}
-                  >
-                    <KeyRound className="size-4" />
-                    Mot de passe
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={selectedAccount.status === "disabled"}
-                    onClick={() => void handleDisableAccount()}
-                  >
-                    <Ban className="size-4" />
-                    Suspendre
+                    <Pencil className="size-4" />
                   </Button>
                 </div>
-              </>
-            ) : (
-              <EmptyState label="Aucun compte sélectionné" />
-            )}
-          </form>
+              </div>
+
+              <div className="mt-3 grid min-h-0 flex-1 content-start gap-2">
+                {room.beds.length > 0 ? (
+                  room.beds.map((bed) => {
+                    const occupied = Boolean(bed.occupiedPatientId)
+                    const occupiedStyle =
+                      bed.occupiedPatientSex === "female"
+                        ? "justify-between gap-3 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-400/40 dark:bg-pink-950/30 dark:text-pink-200"
+                        : "justify-between gap-3 border-primary/30 bg-primary/10 text-primary"
+
+                    return (
+                      <div
+                        key={bed.id}
+                        className={cn(
+                          "relative flex h-16 min-w-0 items-center rounded-xl border px-3 text-left text-sm",
+                          occupied
+                            ? occupiedStyle
+                            : "justify-between border-dashed border-input bg-transparent text-muted-foreground"
+                        )}
+                      >
+                        {occupied ? (
+                          <>
+                            <span className="min-w-0">
+                              <span className="block truncate text-xs font-medium">
+                                Lit {bed.label}
+                              </span>
+                              <span className="mt-0.5 block truncate text-sm font-medium">
+                                {bed.occupiedPatientName ?? "Patient assigné"}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-xs">Occupé</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-xs font-medium">
+                              Lit {bed.label}
+                            </span>
+                            <span className="text-sm font-medium">Libre</span>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="flex h-16 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                    Aucun lit
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      </section>
-    </div>
+      ) : (
+        <EmptyState label="Aucune chambre" />
+      )}
+    </section>
   )
 }
 
@@ -923,11 +1524,13 @@ function AccountFields({
           onChange={(event) => onChange({ ...form, email: event.target.value })}
         />
       </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Role" required>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Poste" required>
           <Select
             value={form.role}
-            onValueChange={(role) => onChange({ ...form, role: role as UserRole })}
+            onValueChange={(role) =>
+              onChange({ ...form, role: role as UserRole })
+            }
           >
             <SelectTrigger className="max-w-full">
               <SelectValue />
@@ -967,59 +1570,6 @@ function AccountFields({
   )
 }
 
-function BedFields({
-  form,
-  rooms,
-  onChange,
-}: {
-  form: BedFormState
-  rooms: Room[]
-  onChange: (form: BedFormState) => void
-}) {
-  return (
-    <>
-      <Field label="Libellé" required>
-        <Input
-          required
-          value={form.label}
-          onChange={(event) => onChange({ ...form, label: event.target.value })}
-        />
-      </Field>
-      <Field label="Chambre" required>
-        <Select
-          required
-          value={form.roomId}
-          onValueChange={(roomId) => onChange({ ...form, roomId })}
-        >
-          <SelectTrigger className="max-w-full">
-            <SelectValue placeholder="Sélectionner une chambre" />
-          </SelectTrigger>
-          <SelectContent>
-            {rooms.map((room) => (
-              <SelectItem key={room.id} value={room.id}>
-                {room.label} - {room.service}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <div className="grid gap-2">
-        <Field label="Ordre">
-          <Input
-            type="number"
-            min="1"
-            step="1"
-            value={form.sortOrder}
-            onChange={(event) =>
-              onChange({ ...form, sortOrder: event.target.value })
-            }
-          />
-        </Field>
-      </div>
-    </>
-  )
-}
-
 function RoomFields({
   form,
   services,
@@ -1031,14 +1581,14 @@ function RoomFields({
 }) {
   return (
     <>
-      <Field label="Libellé" required>
+      <Field label="Nom de la chambre" required>
         <Input
           required
           value={form.label}
           onChange={(event) => onChange({ ...form, label: event.target.value })}
         />
       </Field>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         <Field label="Service" required>
           <ServiceSelect
             services={services}
@@ -1050,7 +1600,7 @@ function RoomFields({
         <Field label="Ordre">
           <Input
             type="number"
-            min="1"
+            min="0"
             step="1"
             value={form.sortOrder}
             onChange={(event) =>
@@ -1072,4 +1622,85 @@ function AccountStatusBadge({ status }: { status: Account["status"] }) {
         : "secondary"
 
   return <Badge variant={variant}>{ACCOUNT_STATUS_LABELS[status]}</Badge>
+}
+
+function StatBox({ label, value }: { label: string; value: number | string }) {
+  return (
+    <span className="rounded-2xl border bg-muted/30 p-3">
+      <span className="block text-xs text-muted-foreground">{label}</span>
+      <span className="mt-1 block font-heading text-xl font-medium">
+        {value}
+      </span>
+    </span>
+  )
+}
+
+function parseAdminView(pathname: string): AdminView {
+  const parts = pathname.replace(/^\/admin\/?/, "").split("/").filter(Boolean)
+
+  if (parts.length === 0) {
+    return { type: "home" }
+  }
+
+  if (parts[0] === "personnel" && parts.length === 1) {
+    return { type: "personnel" }
+  }
+
+  if (parts[0] === "chambres" && parts.length === 1) {
+    return { type: "rooms" }
+  }
+
+  if (parts[0] === "chambres" && parts[1] && parts.length === 2) {
+    return { type: "room-edit", roomId: parts[1] }
+  }
+
+  if (parts[0] === "services" && parts.length === 1) {
+    return { type: "services" }
+  }
+
+  if (parts[0] === "services" && parts[1] && parts.length === 2) {
+    return { type: "service-detail", serviceId: parts[1] }
+  }
+
+  if (
+    parts[0] === "services" &&
+    parts[1] &&
+    parts[2] === "chambres" &&
+    parts[3] &&
+    parts.length === 4
+  ) {
+    return { type: "service-room-edit", serviceId: parts[1], roomId: parts[3] }
+  }
+
+  return { type: "unknown" }
+}
+
+function groupRoomsWithBeds(rooms: Room[], beds: Bed[]) {
+  return [...rooms]
+    .sort(
+      (left, right) =>
+        left.service.localeCompare(right.service) ||
+        left.sortOrder - right.sortOrder ||
+        left.label.localeCompare(right.label)
+    )
+    .map((room) => ({
+      ...room,
+      beds: beds.filter((bed) => bed.roomId === room.id).sort(compareBeds),
+    }))
+}
+
+function compareBeds(left: Bed, right: Bed) {
+  return (
+    left.sortOrder - right.sortOrder || left.label.localeCompare(right.label)
+  )
+}
+
+function occupiedBedCount(beds: Bed[]) {
+  return beds.filter((bed) => bed.occupiedPatientId).length
+}
+
+function servicePatientsInVisit(patients: Patient[], serviceName: string) {
+  return patients.filter(
+    (patient) => patient.currentService === serviceName && patient.currentVisitId
+  ).length
 }

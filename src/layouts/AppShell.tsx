@@ -365,7 +365,7 @@ export function AppShell({
           <Routes>
             <Route index element={<Navigate to="/patients" replace />} />
             <Route
-              path="/admin"
+              path="/admin/*"
               element={
                 account.role === "admin" ? (
                   <AdminPanel onCatalogChanged={refreshPatientContext} />
@@ -749,7 +749,7 @@ function NewVisitDialog({
             </DialogHeader>
 
             <div className="flex items-center gap-2">
-              <div className="flex h-10 min-w-0 flex-1 items-center rounded-full border border-input/60 bg-background shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+              <div className="flex h-10 min-w-0 flex-1 items-center rounded-full border border-input/60 bg-background shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20 gap-2">
                 <Search className="ml-3 size-4 shrink-0 text-muted-foreground" />
                 <Input
                   className="h-full min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
