@@ -1229,6 +1229,7 @@ function ServiceDetailContent({
   )
   const serviceRooms = rooms.filter((room) => room.service === service.name)
   const serviceBeds = beds.filter((bed) => bed.service === service.name)
+  const occupiedBeds = occupiedBedCount(serviceBeds)
   const serviceAccounts = accounts.filter(
     (account) => account.service === service.name
   )
@@ -1274,7 +1275,8 @@ function ServiceDetailContent({
           />
           <StatBox
             label="Lits occupés"
-            value={`${occupiedBedCount(serviceBeds)}/${serviceBeds.length}`}
+            value={`${occupiedBeds}/${serviceBeds.length}`}
+            occupancyRatio={occupancyRatio(occupiedBeds, serviceBeds.length)}
           />
           <StatBox label="Chambres" value={serviceRooms.length} />
           <StatBox label="Personnel" value={serviceAccounts.length} />
@@ -1338,11 +1340,12 @@ function ServiceCard({
   onClick: () => void
 }) {
   const serviceBeds = beds.filter((bed) => bed.service === service.name)
+  const occupiedBeds = occupiedBedCount(serviceBeds)
 
   return (
     <button
       type="button"
-      className="grid min-h-52 gap-4 rounded-3xl border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="grid min-h-52 gap-4 rounded-lg border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       onClick={onClick}
     >
       <span className="flex items-start justify-between gap-3">
@@ -1364,7 +1367,8 @@ function ServiceCard({
         />
         <StatBox
           label="Lits occupés"
-          value={`${occupiedBedCount(serviceBeds)}/${serviceBeds.length}`}
+          value={`${occupiedBeds}/${serviceBeds.length}`}
+          occupancyRatio={occupancyRatio(occupiedBeds, serviceBeds.length)}
         />
       </span>
     </button>
@@ -1624,15 +1628,52 @@ function AccountStatusBadge({ status }: { status: Account["status"] }) {
   return <Badge variant={variant}>{ACCOUNT_STATUS_LABELS[status]}</Badge>
 }
 
-function StatBox({ label, value }: { label: string; value: number | string }) {
+function StatBox({
+  label,
+  occupancyRatio,
+  value,
+}: {
+  label: string
+  occupancyRatio?: number
+  value: number | string
+}) {
   return (
-    <span className="rounded-2xl border bg-muted/30 p-3">
-      <span className="block text-xs text-muted-foreground">{label}</span>
-      <span className="mt-1 block font-heading text-xl font-medium">
+    <span
+      className={cn(
+        "rounded-lg border bg-muted/30 p-3 transition-colors",
+        occupancyRatio != null && occupancyToneClass(occupancyRatio)
+      )}
+    >
+      <span className="block font-mono text-3xl font-semibold tracking-normal">
         {value}
       </span>
+      <span className="mt-1 block text-xs text-muted-foreground">{label}</span>
     </span>
   )
+}
+
+function occupancyRatio(occupied: number, total: number) {
+  if (total <= 0) {
+    return 0
+  }
+
+  return occupied / total
+}
+
+function occupancyToneClass(ratio: number) {
+  if (ratio >= 0.9) {
+    return "border-red-300 bg-red-50 text-red-800 dark:border-red-400/40 dark:bg-red-950/30 dark:text-red-100"
+  }
+
+  if (ratio >= 0.75) {
+    return "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-400/40 dark:bg-orange-950/30 dark:text-orange-100"
+  }
+
+  if (ratio >= 0.5) {
+    return "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-100"
+  }
+
+  return "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/40 dark:bg-emerald-950/30 dark:text-emerald-100"
 }
 
 function parseAdminView(pathname: string): AdminView {
