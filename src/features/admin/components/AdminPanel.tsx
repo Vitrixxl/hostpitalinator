@@ -488,7 +488,7 @@ export function AdminPanel({
 
   const adminActions = (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="flex h-9 items-center gap-2 rounded-full border bg-background px-3 text-sm text-muted-foreground">
+      <label className="flex h-9 items-center gap-2 rounded-lg border bg-background px-3 text-sm text-muted-foreground">
         <input
           type="checkbox"
           className="size-4 rounded border-input"
@@ -653,7 +653,7 @@ function AdminHeader({
           : "Administration"
 
   return (
-    <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 shadow md:flex-row md:items-center md:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         {view.type !== "home" && (
           <Button
@@ -750,10 +750,10 @@ function AdminLandingCard({
   return (
     <button
       type="button"
-      className="flex min-h-60 flex-col justify-between rounded-3xl border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="flex min-h-60 flex-col justify-between rounded-lg border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       onClick={onClick}
     >
-      <span className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+      <span className="flex size-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Icon className="size-7" />
       </span>
       <span>
@@ -822,11 +822,16 @@ function PersonnelPage({
 }) {
   return (
     <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-      <div className="rounded-3xl border bg-background p-4 shadow">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <SectionTitle icon={Users} title="Liste du personnel" />
-          <div className="grid gap-2 sm:grid-cols-3 lg:w-[44rem]">
-            <div className="flex h-9 min-w-0 items-center rounded-full border border-input/60 bg-background shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
+      <div className="rounded-lg border bg-background p-4 shadow">
+        <div className="grid gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Users className="size-4 shrink-0 text-primary" />
+            <h3 className="truncate font-heading text-lg font-medium">
+              Liste du personnel
+            </h3>
+          </div>
+          <div className="grid w-full max-w-3xl gap-2 md:grid-cols-[minmax(14rem,1fr)_minmax(11rem,13rem)_minmax(11rem,13rem)]">
+            <div className="flex h-9 min-w-0 items-center rounded-lg border border-input/60 bg-background shadow-inner shadow-muted/60 transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/20">
               <Search className="ml-3 size-4 shrink-0 text-muted-foreground" />
               <Input
                 className="h-full min-w-0 flex-1 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0 md:text-sm"
@@ -839,7 +844,7 @@ function PersonnelPage({
               value={personnelService}
               onValueChange={onSetPersonnelService}
             >
-              <SelectTrigger className="h-9 max-w-full rounded-full">
+              <SelectTrigger className="h-9 max-w-full rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -852,7 +857,7 @@ function PersonnelPage({
               </SelectContent>
             </Select>
             <Select value={personnelRole} onValueChange={onSetPersonnelRole}>
-              <SelectTrigger className="h-9 max-w-full rounded-full">
+              <SelectTrigger className="h-9 max-w-full rounded-lg">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -867,7 +872,7 @@ function PersonnelPage({
           </div>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-2xl border">
+        <div className="mt-4 overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -909,7 +914,7 @@ function PersonnelPage({
 
       <div className="space-y-4">
         <form
-          className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
+          className="grid gap-3 rounded-lg border bg-background p-4 shadow"
           onSubmit={onCreateAccount}
         >
           <SectionTitle icon={UserPlus} title="Nouveau membre" />
@@ -926,7 +931,7 @@ function PersonnelPage({
         </form>
 
         <form
-          className="grid gap-3 rounded-3xl border bg-background p-4 shadow"
+          className="grid gap-3 rounded-lg border bg-background p-4 shadow"
           onSubmit={onUpdateAccount}
         >
           <SectionTitle icon={UserCog} title="Membre sélectionné" />
@@ -1000,7 +1005,7 @@ function RoomsPage({
         onEditRoom={onEditRoom}
       />
       <form
-        className="grid content-start gap-3 rounded-3xl border bg-background p-4 shadow"
+        className="grid content-start gap-3 rounded-lg border bg-background p-4 shadow"
         onSubmit={onCreateRoom}
       >
         <SectionTitle icon={Plus} title="Nouvelle chambre" />
@@ -1047,7 +1052,7 @@ function RoomEditorPage({
 
   return (
     <form
-      className="mx-auto grid max-w-3xl gap-4 rounded-3xl border bg-background p-4 shadow"
+      className="mx-auto grid max-w-3xl gap-4 rounded-lg border bg-background p-4 shadow"
       onSubmit={onSubmit}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1132,7 +1137,7 @@ function ServicesPage({
         {services.length === 0 && <EmptyState label="Aucun service" />}
       </div>
       <form
-        className="grid content-start gap-3 rounded-3xl border bg-background p-4 shadow"
+        className="grid content-start gap-3 rounded-lg border bg-background p-4 shadow"
         onSubmit={onCreateService}
       >
         <SectionTitle icon={Plus} title="Nouveau service" />
@@ -1237,7 +1242,7 @@ function ServiceDetailContent({
   return (
     <div className="space-y-4">
       <form
-        className="grid gap-4 rounded-3xl border bg-background p-4 shadow"
+        className="grid gap-4 rounded-lg border bg-background p-4 shadow"
         onSubmit={(event) => onUpdateService(event, service, form)}
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1290,9 +1295,9 @@ function ServiceDetailContent({
         onEditRoom={onEditRoom}
       />
 
-      <div className="rounded-3xl border bg-background p-4 shadow">
+      <div className="rounded-lg border bg-background p-4 shadow">
         <SectionTitle icon={Users} title="Personnel du service" />
-        <div className="mt-4 overflow-hidden rounded-2xl border">
+        <div className="mt-4 overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1391,9 +1396,9 @@ function AdminRoomGrid({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <BedIcon className="size-5" />
           </div>
           <div className="min-w-0">
@@ -1413,7 +1418,7 @@ function AdminRoomGrid({
           {groupedRooms.map((room) => (
             <div
               key={room.id}
-              className="flex min-h-56 flex-col rounded-2xl border bg-background p-4 shadow"
+              className="flex min-h-56 flex-col rounded-lg border bg-background p-4 shadow"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
