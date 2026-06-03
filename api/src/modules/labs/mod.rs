@@ -10,8 +10,11 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiError, ApiResult},
-    modules::{auth::CurrentAccount, patients::require_patient_scope},
+    error::{ApiError, ApiJson, ApiResult},
+    modules::{
+        auth::CurrentAccount,
+        patients::{require_patient_read_scope, require_patient_scope},
+    },
     realtime::publish_change,
     state::AppState,
     validation::{require_non_empty, require_one_of},
@@ -106,7 +109,7 @@ async fn list_lab_results(
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
 ) -> ApiResult<Json<Vec<LabPanel>>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, &patient_id, &current_account).await?;
 
     let rows = sqlx::query_as::<_, LabPanelRow>(
         r#"
@@ -134,7 +137,7 @@ async fn add_lab_result(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
-    Json(payload): Json<AddLabPanelRequest>,
+    ApiJson(payload): ApiJson<AddLabPanelRequest>,
 ) -> ApiResult<Json<LabPanel>> {
     require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;
@@ -269,7 +272,9 @@ impl AddLabPanelRequest {
         }
 
         if self.results.is_empty() {
-            return Err(ApiError::bad_request("results is required"));
+            return Err(ApiError::bad_request(
+                "Au moins un resultat est obligatoire",
+            ));
         }
 
         let marker_keys = lab_marker_keys(self.panel_type.trim());
@@ -281,7 +286,7 @@ impl AddLabPanelRequest {
             require_one_of(marker_key, "markerKey", marker_keys)?;
 
             if !seen_marker_keys.insert(marker_key) {
-                return Err(ApiError::bad_request("markerKey must be unique"));
+                return Err(ApiError::bad_request("Le marqueur doit etre unique"));
             }
 
             require_non_empty(&result.marker_label, "markerLabel")?;

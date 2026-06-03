@@ -360,6 +360,55 @@ async fn services_are_admin_managed_and_required_for_assignments() {
 }
 
 #[tokio::test]
+async fn rooms_are_admin_managed_and_used_by_beds() {
+    let context = test_context().await;
+
+    let (room_status, room) = request_json(
+        &context.app,
+        Method::POST,
+        "/rooms",
+        Some(&context.admin_token),
+        Some(json!({
+            "label": "ONC-101",
+            "service": "Medecine",
+            "sortOrder": 101
+        })),
+    )
+    .await;
+    assert_eq!(room_status, StatusCode::OK, "{room}");
+
+    let room_id = room["id"].as_str().expect("room id");
+
+    let (bed_status, bed) = request_json(
+        &context.app,
+        Method::POST,
+        "/beds",
+        Some(&context.admin_token),
+        Some(json!({
+            "label": "ONC-101-A",
+            "roomId": room_id,
+            "sortOrder": 101
+        })),
+    )
+    .await;
+    assert_eq!(bed_status, StatusCode::OK, "{bed}");
+    assert_eq!(bed["roomId"], room_id);
+    assert_eq!(bed["room"], "ONC-101");
+    assert_eq!(bed["service"], "Medecine");
+
+    let (delete_status, delete_body) = request_json(
+        &context.app,
+        Method::DELETE,
+        format!("/rooms/{room_id}"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(delete_status, StatusCode::CONFLICT, "{delete_body}");
+    assert_eq!(delete_body["error"]["code"], "conflict");
+}
+
+#[tokio::test]
 async fn non_admin_accounts_are_scoped_to_their_service() {
     let context = test_context().await;
 
@@ -424,8 +473,35 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
     .await;
     assert_eq!(list_status, StatusCode::OK, "{list}");
     let list = list.as_array().expect("doctor patient list");
-    assert_eq!(list.len(), 1);
-    assert_eq!(list[0]["id"], cardio_patient_id);
+    assert_eq!(list.len(), 2);
+    assert!(list
+        .iter()
+        .any(|patient| patient["id"] == cardio_patient_id));
+    assert!(list.iter().any(|patient| patient["id"] == med_patient_id));
+
+    let (med_list_status, med_list) = request_json(
+        &context.app,
+        Method::GET,
+        "/patients?service=Medecine",
+        Some(doctor_token),
+        None,
+    )
+    .await;
+    assert_eq!(med_list_status, StatusCode::OK, "{med_list}");
+    let med_list = med_list.as_array().expect("doctor selected service list");
+    assert_eq!(med_list.len(), 1);
+    assert_eq!(med_list[0]["id"], med_patient_id);
+
+    let (med_read_status, med_read) = request_json(
+        &context.app,
+        Method::GET,
+        format!("/patients/{med_patient_id}"),
+        Some(doctor_token),
+        None,
+    )
+    .await;
+    assert_eq!(med_read_status, StatusCode::OK, "{med_read}");
+    assert_eq!(med_read["id"], med_patient_id);
 
     let (own_update_status, own_update) = request_json(
         &context.app,
@@ -445,7 +521,8 @@ async fn non_admin_accounts_are_scoped_to_their_service() {
         Some(json!({ "administrativeInfo": "Hors service" })),
     )
     .await;
-    assert_eq!(other_update_status, StatusCode::FORBIDDEN, "{other_update}");
+    assert_eq!(other_update_status, StatusCode::OK, "{other_update}");
+    assert_eq!(other_update["administrativeInfo"], "Hors service");
 
     let (wrong_create_status, wrong_create) = request_json(
         &context.app,
@@ -502,6 +579,223 @@ async fn patients_can_be_created_and_listed() {
     .await;
     assert_eq!(list_status, StatusCode::OK);
     assert_eq!(list.as_array().expect("patient list").len(), 1);
+}
+
+#[tokio::test]
+async fn entrance_exam_can_store_seeded_references_and_free_text_history() {
+    let context = test_context().await;
+    let patient = create_patient(&context.app, &context.admin_token).await;
+    let patient_id = patient["id"].as_str().expect("patient id");
+
+    let (pathology_status, pathologies) = request_json(
+        &context.app,
+        Method::GET,
+        "/clinical-references?kind=pathology&search=diabete",
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(pathology_status, StatusCode::OK, "{pathologies}");
+    assert!(pathologies
+        .as_array()
+        .expect("pathology references")
+        .iter()
+        .any(|reference| reference["source"] == "CIM-10" && reference["code"] == "E11.9"));
+
+    let (act_status, acts) = request_json(
+        &context.app,
+        Method::GET,
+        "/clinical-references?kind=medical_act&search=cesarienne",
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(act_status, StatusCode::OK, "{acts}");
+    assert!(acts
+        .as_array()
+        .expect("act references")
+        .iter()
+        .any(|reference| reference["source"] == "CCAM" && reference["code"] == "JQGA002"));
+
+    let entrance_exam_uri = format!("/patients/{patient_id}/entrance-exam");
+    let (save_status, saved) = request_json(
+        &context.app,
+        Method::PUT,
+        &entrance_exam_uri,
+        Some(&context.admin_token),
+        Some(json!({
+            "lifestyle": "Vit seul, tabagisme sevre.",
+            "diseaseHistory": "Dyspnee progressive depuis trois semaines.",
+            "synthesis": "Examen d'entree oriente pneumologie.",
+            "antecedents": [
+                {
+                    "category": "pathology",
+                    "source": "CIM-10",
+                    "code": "E11.9",
+                    "label": "Diabete sucre de type 2 sans complication",
+                    "notes": "Equilibre par regime"
+                },
+                {
+                    "category": "medical_act",
+                    "source": "CCAM",
+                    "code": "JQGA002",
+                    "label": "Accouchement par cesarienne programmee, par laparotomie",
+                    "notes": "Antecedent obstetrical"
+                }
+            ]
+        })),
+    )
+    .await;
+    assert_eq!(save_status, StatusCode::OK, "{saved}");
+    let saved_exam_id = saved["exam"]["id"].as_str().expect("saved exam id");
+    let saved_visit_id = saved["exam"]["visitId"]
+        .as_str()
+        .expect("saved exam visit id");
+    assert_eq!(saved["exam"]["patientId"], patient_id);
+    assert_eq!(saved["exam"]["isDraft"], false);
+    assert_eq!(saved["exam"]["lifestyle"], "Vit seul, tabagisme sevre.");
+    assert_eq!(
+        saved["antecedents"]
+            .as_array()
+            .expect("saved antecedents")
+            .len(),
+        2
+    );
+
+    let (read_status, read) = request_json(
+        &context.app,
+        Method::GET,
+        &entrance_exam_uri,
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(read_status, StatusCode::OK, "{read}");
+    assert_eq!(
+        read["exam"]["synthesis"],
+        "Examen d'entree oriente pneumologie."
+    );
+    assert_eq!(
+        read["antecedents"]
+            .as_array()
+            .expect("read antecedents")
+            .len(),
+        2
+    );
+
+    let (history_status, history) = request_json(
+        &context.app,
+        Method::GET,
+        format!("/patients/{patient_id}/entrance-exams?limit=5&offset=0"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(history_status, StatusCode::OK, "{history}");
+    let history = history.as_array().expect("exam history");
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0]["patientId"], patient_id);
+
+    let (end_visit_status, ended_patient) = request_json(
+        &context.app,
+        Method::PATCH,
+        format!("/patients/{patient_id}/end-visit"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(end_visit_status, StatusCode::OK, "{ended_patient}");
+    assert!(ended_patient["currentVisitId"].is_null());
+
+    let (draft_status, draft_exam) = request_json(
+        &context.app,
+        Method::PUT,
+        &entrance_exam_uri,
+        Some(&context.admin_token),
+        Some(json!({
+            "lifestyle": "Vit seul, tabagisme sevre.",
+            "diseaseHistory": "Dyspnee progressive depuis trois semaines.",
+            "synthesis": "Brouillon prepare avant la prochaine entree.",
+            "antecedents": []
+        })),
+    )
+    .await;
+    assert_eq!(draft_status, StatusCode::OK, "{draft_exam}");
+    assert_eq!(draft_exam["exam"]["id"], saved_exam_id);
+    assert_eq!(draft_exam["exam"]["visitId"], "DRAFT");
+    assert_eq!(draft_exam["exam"]["isDraft"], true);
+
+    let (read_draft_status, read_draft) = request_json(
+        &context.app,
+        Method::GET,
+        &entrance_exam_uri,
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(read_draft_status, StatusCode::OK, "{read_draft}");
+    assert_eq!(
+        read_draft["exam"]["synthesis"],
+        "Brouillon prepare avant la prochaine entree."
+    );
+    assert_eq!(read_draft["exam"]["isDraft"], true);
+
+    let (new_visit_status, new_visit_patient) = request_json(
+        &context.app,
+        Method::PATCH,
+        format!("/patients/{patient_id}/new-visit"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(new_visit_status, StatusCode::OK, "{new_visit_patient}");
+    let new_visit_id = new_visit_patient["currentVisitId"]
+        .as_str()
+        .expect("new visit id");
+    assert_ne!(new_visit_id, saved_visit_id);
+
+    let (new_visit_exam_status, new_visit_exam) = request_json(
+        &context.app,
+        Method::GET,
+        &entrance_exam_uri,
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(new_visit_exam_status, StatusCode::OK, "{new_visit_exam}");
+    assert_eq!(new_visit_exam["exam"]["id"], saved_exam_id);
+    assert_eq!(new_visit_exam["exam"]["visitId"], new_visit_id);
+    assert_eq!(new_visit_exam["exam"]["isDraft"], false);
+
+    let (update_status, updated_exam) = request_json(
+        &context.app,
+        Method::PUT,
+        &entrance_exam_uri,
+        Some(&context.admin_token),
+        Some(json!({
+            "lifestyle": "Vit seul, tabagisme sevre.",
+            "diseaseHistory": "Dyspnee amelioree.",
+            "synthesis": "Examen d'entree mis a jour.",
+            "antecedents": []
+        })),
+    )
+    .await;
+    assert_eq!(update_status, StatusCode::OK, "{updated_exam}");
+    assert_eq!(updated_exam["exam"]["id"], saved_exam_id);
+    assert_eq!(updated_exam["exam"]["visitId"], new_visit_id);
+
+    let (updated_history_status, updated_history) = request_json(
+        &context.app,
+        Method::GET,
+        format!("/patients/{patient_id}/entrance-exams?limit=5&offset=0"),
+        Some(&context.admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(updated_history_status, StatusCode::OK, "{updated_history}");
+    let updated_history = updated_history.as_array().expect("updated history");
+    assert_eq!(updated_history.len(), 1);
+    assert_eq!(updated_history[0]["id"], saved_exam_id);
 }
 
 #[tokio::test]

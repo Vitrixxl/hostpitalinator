@@ -8,7 +8,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{is_unique_constraint, ApiError, ApiResult},
+    error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
     modules::auth::{generate_password, hash_password, require_admin, CurrentAccount},
     modules::services,
     realtime::publish_change,
@@ -112,7 +112,7 @@ async fn get_account(
         .bind(id)
         .fetch_optional(&state.pool)
         .await?
-        .ok_or_else(|| ApiError::not_found("Account not found"))?;
+        .ok_or_else(|| ApiError::not_found("Compte introuvable"))?;
 
     Ok(Json(account))
 }
@@ -120,7 +120,7 @@ async fn get_account(
 async fn create_account(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Json(payload): Json<CreateAccountRequest>,
+    ApiJson(payload): ApiJson<CreateAccountRequest>,
 ) -> ApiResult<Json<AccountWithGeneratedPassword>> {
     require_admin(&current_account)?;
     payload.validate()?;
@@ -153,7 +153,7 @@ async fn create_account(
     .await
     .map_err(|error| {
         if is_unique_constraint(&error) {
-            ApiError::conflict("An account with this email already exists")
+            ApiError::conflict("Un compte avec ce courriel existe deja")
         } else {
             ApiError::from(error)
         }
@@ -179,7 +179,7 @@ async fn update_account(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
-    Json(payload): Json<UpdateAccountRequest>,
+    ApiJson(payload): ApiJson<UpdateAccountRequest>,
 ) -> ApiResult<Json<Account>> {
     require_admin(&current_account)?;
     payload.validate()?;
@@ -188,7 +188,7 @@ async fn update_account(
         .bind(&id)
         .fetch_optional(&state.pool)
         .await?
-        .ok_or_else(|| ApiError::not_found("Account not found"))?;
+        .ok_or_else(|| ApiError::not_found("Compte introuvable"))?;
 
     let name = payload.name.unwrap_or(current.name);
     let email = payload.email.unwrap_or(current.email);
@@ -216,7 +216,7 @@ async fn update_account(
     .await
     .map_err(|error| {
         if is_unique_constraint(&error) {
-            ApiError::conflict("An account with this email already exists")
+            ApiError::conflict("Un compte avec ce courriel existe deja")
         } else {
             ApiError::from(error)
         }
@@ -255,7 +255,7 @@ async fn disable_account(
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Account not found"))?;
+    .ok_or_else(|| ApiError::not_found("Compte introuvable"))?;
 
     sqlx::query(
         "UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE account_id = ? AND revoked_at IS NULL",
@@ -281,7 +281,7 @@ async fn assign_role(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
-    Json(payload): Json<AssignRoleRequest>,
+    ApiJson(payload): ApiJson<AssignRoleRequest>,
 ) -> ApiResult<Json<Account>> {
     require_admin(&current_account)?;
     require_one_of(&payload.role, "role", ROLES)?;
@@ -298,7 +298,7 @@ async fn assign_role(
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Account not found"))?;
+    .ok_or_else(|| ApiError::not_found("Compte introuvable"))?;
 
     publish_change(
         &state,
@@ -335,7 +335,7 @@ async fn reset_password(
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Account not found"))?;
+    .ok_or_else(|| ApiError::not_found("Compte introuvable"))?;
 
     sqlx::query(
         "UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE account_id = ? AND revoked_at IS NULL",

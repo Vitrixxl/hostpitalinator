@@ -8,8 +8,12 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiError, ApiResult},
-    modules::{auth::CurrentAccount, patients::require_patient_scope, services},
+    error::{ApiError, ApiJson, ApiResult},
+    modules::{
+        auth::CurrentAccount,
+        patients::{require_patient_read_scope, require_patient_scope},
+        services,
+    },
     realtime::publish_change,
     state::AppState,
     validation::require_non_empty,
@@ -23,6 +27,7 @@ pub struct EvolutionNote {
     service: String,
     visit_id: String,
     author: String,
+    author_role: String,
     recorded_at: String,
     content: String,
     created_at: String,
@@ -50,7 +55,7 @@ async fn list_evolution_notes(
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
 ) -> ApiResult<Json<Vec<EvolutionNote>>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, &patient_id, &current_account).await?;
 
     let notes = sqlx::query_as::<_, EvolutionNote>(
         "SELECT * FROM evolution_notes WHERE patient_id = ? ORDER BY recorded_at DESC, created_at DESC",
@@ -66,7 +71,7 @@ async fn add_evolution_note(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
-    Json(payload): Json<AddEvolutionNoteRequest>,
+    ApiJson(payload): ApiJson<AddEvolutionNoteRequest>,
 ) -> ApiResult<Json<EvolutionNote>> {
     let patient = require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;
@@ -79,16 +84,16 @@ async fn add_evolution_note(
 
     if service != patient.current_service {
         return Err(ApiError::bad_request(
-            "Evolution note service must match patient service",
+            "Le service de la note d'evolution doit correspondre au service du patient",
         ));
     }
 
     let note = sqlx::query_as::<_, EvolutionNote>(
         r#"
         INSERT INTO evolution_notes (
-          id, patient_id, service, visit_id, author, recorded_at, content
+          id, patient_id, service, visit_id, author, author_role, recorded_at, content
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
@@ -97,6 +102,7 @@ async fn add_evolution_note(
     .bind(service)
     .bind(payload.visit_id.trim())
     .bind(payload.author.trim())
+    .bind(current_account.role.as_str())
     .bind(payload.recorded_at.trim())
     .bind(payload.content.trim())
     .fetch_one(&state.pool)

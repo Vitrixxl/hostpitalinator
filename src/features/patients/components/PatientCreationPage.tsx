@@ -1,13 +1,13 @@
-import type { FormEvent } from "react"
-import { Plus, UserPlus } from "lucide-react"
+import type { FormEvent } from "react";
+import { Plus, UserPlus } from "lucide-react";
 
-import type { PatientFormState } from "@/app/types"
-import { AlertMessage } from "@/components/common/Feedback"
-import { SectionTitle } from "@/components/common/SectionTitle"
-import { Button } from "@/components/ui/button"
-import type { Account, Bed, Service } from "@/types"
+import type { PatientFormState } from "@/app/types";
+import { AlertMessage } from "@/components/common/Feedback";
+import { SectionTitle } from "@/components/common/SectionTitle";
+import { Button } from "@/components/ui/button";
+import type { Account, Bed, Service } from "@/types";
 
-import { PatientFormFields } from "./PatientFormFields"
+import { PatientFormFields } from "./PatientFormFields";
 
 export function PatientCreationPage({
   account,
@@ -19,18 +19,18 @@ export function PatientCreationPage({
   onChange,
   onSubmit,
 }: {
-  account: Account
-  beds: Bed[]
-  error: string
-  form: PatientFormState
-  services: Service[]
-  onCancel: () => void
-  onChange: (form: PatientFormState) => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  account: Account;
+  beds: Bed[];
+  error: string;
+  form: PatientFormState;
+  services: Service[];
+  onCancel: () => void;
+  onChange: (form: PatientFormState) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
-      <div className="flex flex-col gap-3 rounded-3xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-7xl space-y-5">
+      <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-heading text-2xl font-medium">
             Creation d'un nouveau patient
@@ -47,7 +47,7 @@ export function PatientCreationPage({
       {error && <AlertMessage message={error} />}
 
       <form className="space-y-4" onSubmit={onSubmit}>
-        <section className="rounded-3xl border bg-background p-4">
+        <section className="rounded-3xl border bg-background p-4 shadow">
           <SectionTitle icon={UserPlus} title="Donnees administratives" />
           <PatientFormFields
             account={account}
@@ -70,5 +70,5 @@ export function PatientCreationPage({
         </div>
       </form>
     </div>
-  )
+  );
 }

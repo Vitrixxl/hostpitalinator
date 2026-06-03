@@ -3,7 +3,7 @@ import type { EvolutionNote } from "@/types"
 
 export type AddEvolutionNoteInput = Omit<
   EvolutionNote,
-  "id" | "patientId" | "createdAt"
+  "id" | "patientId" | "authorRole" | "createdAt"
 >
 
 export function listEvolutionNotes(patientId: string) {

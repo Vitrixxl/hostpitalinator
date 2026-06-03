@@ -12,8 +12,11 @@ use std::path::Path as FsPath;
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiError, ApiResult},
-    modules::{auth::CurrentAccount, patients::require_patient_scope},
+    error::{ApiError, ApiJson, ApiResult},
+    modules::{
+        auth::CurrentAccount,
+        patients::{require_patient_read_scope, require_patient_scope},
+    },
     realtime::publish_change,
     state::AppState,
     validation::{require_non_empty, require_one_of},
@@ -82,7 +85,7 @@ async fn list_medical_documents(
     Path(patient_id): Path<String>,
     Query(query): Query<ListMedicalDocumentsQuery>,
 ) -> ApiResult<Json<Vec<MedicalDocument>>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, &patient_id, &current_account).await?;
 
     let documents = if let Some(category) = query.category {
         require_one_of(&category, "category", CATEGORIES)?;
@@ -109,7 +112,7 @@ async fn add_medical_document(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
-    Json(payload): Json<AddMedicalDocumentRequest>,
+    ApiJson(payload): ApiJson<AddMedicalDocumentRequest>,
 ) -> ApiResult<Json<MedicalDocument>> {
     require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;
@@ -170,8 +173,8 @@ async fn open_medical_document(
             .bind(id)
             .fetch_optional(&state.pool)
             .await?
-            .ok_or_else(|| ApiError::not_found("Medical document not found"))?;
-    require_patient_scope(&state, &document.patient_id, &current_account).await?;
+            .ok_or_else(|| ApiError::not_found("Document medical introuvable"))?;
+    require_patient_read_scope(&state, &document.patient_id, &current_account).await?;
 
     let storage_path = document.storage_path.clone();
 
@@ -191,18 +194,18 @@ async fn download_medical_document(
             .bind(id)
             .fetch_optional(&state.pool)
             .await?
-            .ok_or_else(|| ApiError::not_found("Medical document not found"))?;
-    require_patient_scope(&state, &document.patient_id, &current_account).await?;
+            .ok_or_else(|| ApiError::not_found("Document medical introuvable"))?;
+    require_patient_read_scope(&state, &document.patient_id, &current_account).await?;
 
     let storage_path = document
         .storage_path
         .as_ref()
-        .ok_or_else(|| ApiError::not_found("No stored file for this document"))?;
+        .ok_or_else(|| ApiError::not_found("Aucun fichier stocke pour ce document"))?;
     let storage_path = FsPath::new(storage_path);
     ensure_download_path_allowed(&state, storage_path).await?;
     let bytes = tokio::fs::read(storage_path)
         .await
-        .map_err(|_| ApiError::not_found("Stored file not found"))?;
+        .map_err(|_| ApiError::not_found("Fichier stocke introuvable"))?;
 
     let mut headers = HeaderMap::new();
     let content_type = document
@@ -229,17 +232,17 @@ async fn download_medical_document(
 async fn ensure_download_path_allowed(state: &AppState, storage_path: &FsPath) -> ApiResult<()> {
     let storage_root = tokio::fs::canonicalize(&state.file_storage_dir)
         .await
-        .map_err(|_| ApiError::not_found("Document storage directory not found"))?;
+        .map_err(|_| ApiError::not_found("Repertoire de stockage des documents introuvable"))?;
     let file_path = tokio::fs::canonicalize(storage_path)
         .await
-        .map_err(|_| ApiError::not_found("Stored file not found"))?;
+        .map_err(|_| ApiError::not_found("Fichier stocke introuvable"))?;
 
     if file_path.starts_with(storage_root) {
         return Ok(());
     }
 
     Err(ApiError::forbidden(
-        "Only files managed by the document storage can be downloaded",
+        "Seuls les fichiers geres par le stockage des documents peuvent etre telecharges",
     ))
 }
 
@@ -285,7 +288,7 @@ async fn store_uploaded_file(
         .map_or(content_base64.as_str(), |(_, value)| value);
     let bytes = STANDARD
         .decode(encoded)
-        .map_err(|_| ApiError::bad_request("contentBase64 must be valid base64"))?;
+        .map_err(|_| ApiError::bad_request("Le contenu du fichier doit etre un base64 valide"))?;
 
     let original_file_name = payload
         .original_file_name

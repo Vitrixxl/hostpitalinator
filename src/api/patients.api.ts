@@ -24,7 +24,7 @@ export type CreatePatientInput = Pick<
 export type UpdatePatientInput = Partial<CreatePatientInput>
 
 export function listPatients(
-  options: { includeArchived?: boolean; q?: string } = {}
+  options: { includeArchived?: boolean; q?: string; service?: string } = {}
 ) {
   const params = new URLSearchParams()
 
@@ -34,6 +34,10 @@ export function listPatients(
 
   if (options.q) {
     params.set("q", options.q)
+  }
+
+  if (options.service) {
+    params.set("service", options.service)
   }
 
   const query = params.toString()
@@ -58,9 +62,13 @@ export function updatePatient(patientId: string, input: UpdatePatientInput) {
   })
 }
 
-export function startNewPatientVisit(patientId: string) {
+export function startNewPatientVisit(
+  patientId: string,
+  input?: Pick<Patient, "bedId">
+) {
   return callApi<Patient>(`/patients/${patientId}/new-visit`, {
     method: "PATCH",
+    body: input,
   })
 }
 

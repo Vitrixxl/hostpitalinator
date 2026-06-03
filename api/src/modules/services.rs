@@ -8,7 +8,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{is_unique_constraint, ApiError, ApiResult},
+    error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
     modules::auth::{require_admin, CurrentAccount},
     realtime::publish_change,
     state::AppState,
@@ -49,7 +49,7 @@ pub async fn ensure_service_exists(state: &AppState, service: &str) -> ApiResult
         .await?;
 
     if exists.0 == 0 {
-        return Err(ApiError::not_found("Service not found"));
+        return Err(ApiError::not_found("Service introuvable"));
     }
 
     Ok(())
@@ -79,7 +79,7 @@ pub async fn canonical_service_name(state: &AppState, service: &str) -> ApiResul
         .bind(service)
         .fetch_optional(&state.pool)
         .await?
-        .ok_or_else(|| ApiError::not_found("Service not found"))?;
+        .ok_or_else(|| ApiError::not_found("Service introuvable"))?;
 
     Ok(row.0)
 }
@@ -96,7 +96,7 @@ async fn list_services(State(state): State<AppState>) -> ApiResult<Json<Vec<Serv
 async fn create_service(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Json(payload): Json<ServiceRequest>,
+    ApiJson(payload): ApiJson<ServiceRequest>,
 ) -> ApiResult<Json<Service>> {
     require_admin(&current_account)?;
     let name = normalize_service_name(&payload.name)?;
@@ -114,7 +114,7 @@ async fn create_service(
     .await
     .map_err(|error| {
         if is_unique_constraint(&error) {
-            ApiError::conflict("Service already exists")
+            ApiError::conflict("Ce service existe deja")
         } else {
             ApiError::from(error)
         }
@@ -137,7 +137,7 @@ async fn update_service(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
-    Json(payload): Json<ServiceRequest>,
+    ApiJson(payload): ApiJson<ServiceRequest>,
 ) -> ApiResult<Json<Service>> {
     require_admin(&current_account)?;
     let name = normalize_service_name(&payload.name)?;
@@ -147,11 +147,11 @@ async fn update_service(
         .bind(&id)
         .fetch_optional(&mut *transaction)
         .await?
-        .ok_or_else(|| ApiError::not_found("Service not found"))?;
+        .ok_or_else(|| ApiError::not_found("Service introuvable"))?;
     let reference_count = service_reference_count(&state, &previous.0).await?;
 
     if previous.0 != name && reference_count > 0 {
-        return Err(ApiError::conflict("Service is still referenced"));
+        return Err(ApiError::conflict("Ce service est encore utilise"));
     }
 
     let service = sqlx::query_as::<_, Service>(
@@ -168,7 +168,7 @@ async fn update_service(
     .await
     .map_err(|error| {
         if is_unique_constraint(&error) {
-            ApiError::conflict("Service already exists")
+            ApiError::conflict("Ce service existe deja")
         } else {
             ApiError::from(error)
         }
@@ -200,12 +200,12 @@ async fn delete_service(
         .bind(&id)
         .fetch_optional(&state.pool)
         .await?
-        .ok_or_else(|| ApiError::not_found("Service not found"))?;
+        .ok_or_else(|| ApiError::not_found("Service introuvable"))?;
 
     let reference_count = service_reference_count(&state, &service.name).await?;
 
     if reference_count > 0 {
-        return Err(ApiError::conflict("Service is still referenced"));
+        return Err(ApiError::conflict("Ce service est encore utilise"));
     }
 
     sqlx::query("DELETE FROM services WHERE id = ?")
@@ -232,10 +232,12 @@ async fn service_reference_count(state: &AppState, service: &str) -> ApiResult<i
         SELECT
           (SELECT COUNT(1) FROM accounts WHERE service = ?)
           + (SELECT COUNT(1) FROM patients WHERE current_service = ?)
+          + (SELECT COUNT(1) FROM rooms WHERE service = ?)
           + (SELECT COUNT(1) FROM beds WHERE service = ?)
           + (SELECT COUNT(1) FROM evolution_notes WHERE service = ?)
         "#,
     )
+    .bind(service)
     .bind(service)
     .bind(service)
     .bind(service)

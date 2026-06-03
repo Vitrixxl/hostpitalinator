@@ -19,7 +19,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{is_unique_constraint, ApiError, ApiResult},
+    error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
     modules::services,
     state::AppState,
     validation::require_non_empty,
@@ -221,7 +221,7 @@ pub async fn authenticate_token(
     .bind(&token_hash)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::unauthorized("Authentication required"))?;
+    .ok_or_else(|| ApiError::unauthorized("Authentification requise"))?;
 
     sqlx::query(
         "UPDATE sessions SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE token_hash = ?",
@@ -238,7 +238,7 @@ pub fn require_admin(account: &CurrentAccount) -> ApiResult<()> {
         return Ok(());
     }
 
-    Err(ApiError::forbidden("Admin role required"))
+    Err(ApiError::forbidden("Role administrateur requis"))
 }
 
 pub fn require_service_scope(account: &CurrentAccount, service: &str) -> ApiResult<()> {
@@ -246,7 +246,7 @@ pub fn require_service_scope(account: &CurrentAccount, service: &str) -> ApiResu
         return Ok(());
     }
 
-    Err(ApiError::forbidden("Service scope required"))
+    Err(ApiError::forbidden("Acces limite au service autorise"))
 }
 
 pub fn generate_password() -> String {
@@ -308,7 +308,7 @@ fn to_current_account(credentials: &AccountCredentials) -> CurrentAccount {
 
 async fn login(
     State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
+    ApiJson(payload): ApiJson<LoginRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
     require_non_empty(&payload.email, "email")?;
     require_non_empty(&payload.password, "password")?;
@@ -323,14 +323,14 @@ async fn login(
     .bind(payload.email.trim())
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::unauthorized("Invalid credentials"))?;
+    .ok_or_else(|| ApiError::unauthorized("Identifiants invalides"))?;
 
     if credentials.status == "disabled" {
-        return Err(ApiError::unauthorized("Account is disabled"));
+        return Err(ApiError::unauthorized("Ce compte est suspendu"));
     }
 
     if !verify_password(&payload.password, &credentials.password_hash)? {
-        return Err(ApiError::unauthorized("Invalid credentials"));
+        return Err(ApiError::unauthorized("Identifiants invalides"));
     }
 
     let token = generate_token();
@@ -368,7 +368,7 @@ async fn me(Extension(account): Extension<CurrentAccount>) -> Json<MeResponse> {
 
 async fn bootstrap_admin(
     State(state): State<AppState>,
-    Json(payload): Json<BootstrapAdminRequest>,
+    ApiJson(payload): ApiJson<BootstrapAdminRequest>,
 ) -> ApiResult<Json<AccountWithGeneratedPassword>> {
     require_non_empty(&payload.name, "name")?;
     require_non_empty(&payload.email, "email")?;
@@ -378,7 +378,9 @@ async fn bootstrap_admin(
         .await?;
 
     if account_count.0 > 0 {
-        return Err(ApiError::forbidden("Initial admin already exists"));
+        return Err(ApiError::forbidden(
+            "Le compte administrateur initial existe deja",
+        ));
     }
 
     let service = services::ensure_service_created(&state, &payload.service).await?;
@@ -402,7 +404,7 @@ async fn bootstrap_admin(
     .await
     .map_err(|error| {
         if is_unique_constraint(&error) {
-            ApiError::conflict("An account with this email already exists")
+            ApiError::conflict("Un compte avec ce courriel existe deja")
         } else {
             ApiError::from(error)
         }
@@ -418,10 +420,10 @@ fn bearer_token(headers: &HeaderMap) -> ApiResult<&str> {
     let value = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| ApiError::unauthorized("Authentication required"))?;
+        .ok_or_else(|| ApiError::unauthorized("Authentification requise"))?;
 
     value
         .strip_prefix("Bearer ")
         .filter(|token| !token.trim().is_empty())
-        .ok_or_else(|| ApiError::unauthorized("Authentication required"))
+        .ok_or_else(|| ApiError::unauthorized("Authentification requise"))
 }

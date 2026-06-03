@@ -1,5 +1,16 @@
 import { LAB_PANEL_TYPES, labPanelDefinition } from "@/types"
-import type { Account, Bed, Medicine, Patient, Service, VitalRecord } from "@/types"
+import type {
+  Account,
+  AntecedentCategory,
+  Bed,
+  EntranceExam,
+  Medicine,
+  Patient,
+  PatientAntecedent,
+  Room,
+  Service,
+  VitalRecord,
+} from "@/types"
 
 import {
   dateFromIsoValue,
@@ -11,9 +22,11 @@ import {
 } from "./date-utils"
 import type {
   AccountFormState,
+  AntecedentFormState,
   BedFormState,
   DocumentFormState,
   EvolutionFormState,
+  EntranceExamFormState,
   LabFormResultState,
   LabFormState,
   PatientFormState,
@@ -21,6 +34,7 @@ import type {
   PrescriptionFilters,
   PrescriptionFormState,
   PrescriptionMedicationFormState,
+  RoomFormState,
   ServiceFormState,
   VitalFormState,
 } from "./types"
@@ -250,6 +264,71 @@ export function emptyEvolutionForm(
   }
 }
 
+export function emptyEntranceExamForm(): EntranceExamFormState {
+  return {
+    lifestyle: "",
+    diseaseHistory: "",
+    synthesis: "",
+    antecedents: [],
+  }
+}
+
+export function emptyAntecedentForm(
+  category: AntecedentCategory
+): AntecedentFormState {
+  return {
+    id: crypto.randomUUID(),
+    category,
+    source: "",
+    code: "",
+    label: "",
+    notes: "",
+    referenceQuery: "",
+  }
+}
+
+export function entranceExamToForm(exam: EntranceExam): EntranceExamFormState {
+  return {
+    lifestyle: exam.exam?.lifestyle ?? "",
+    diseaseHistory: exam.exam?.diseaseHistory ?? "",
+    synthesis: exam.exam?.synthesis ?? "",
+    antecedents: exam.antecedents.map(antecedentToForm),
+  }
+}
+
+function antecedentToForm(antecedent: PatientAntecedent): AntecedentFormState {
+  const referenceQuery = [antecedent.code, antecedent.label]
+    .filter(Boolean)
+    .join(" - ")
+
+  return {
+    id: antecedent.id,
+    category: antecedent.category,
+    source: antecedent.source ?? "",
+    code: antecedent.code ?? "",
+    label: antecedent.label,
+    notes: antecedent.notes ?? "",
+    referenceQuery,
+  }
+}
+
+export function entranceExamFormToInput(form: EntranceExamFormState) {
+  return {
+    lifestyle: form.lifestyle.trim() || null,
+    diseaseHistory: form.diseaseHistory.trim() || null,
+    synthesis: form.synthesis.trim() || null,
+    antecedents: form.antecedents
+      .map((antecedent) => ({
+        category: antecedent.category,
+        source: antecedent.source.trim() || null,
+        code: antecedent.code.trim() || null,
+        label: antecedent.label.trim(),
+        notes: antecedent.notes.trim() || null,
+      }))
+      .filter((antecedent) => antecedent.label !== ""),
+  }
+}
+
 export function defaultVisitId() {
   return `VIS-${todayInput().replaceAll("-", "")}`
 }
@@ -270,10 +349,18 @@ export function emptyServiceForm(): ServiceFormState {
   }
 }
 
-export function emptyBedForm(service = ""): BedFormState {
+export function emptyRoomForm(service = ""): RoomFormState {
   return {
     label: "",
     service,
+    sortOrder: "",
+  }
+}
+
+export function emptyBedForm(roomId = ""): BedFormState {
+  return {
+    label: "",
+    roomId,
     sortOrder: "",
   }
 }
@@ -300,10 +387,18 @@ export function serviceToForm(service: Service): ServiceFormState {
   }
 }
 
+export function roomToForm(room: Room): RoomFormState {
+  return {
+    label: room.label,
+    service: room.service,
+    sortOrder: room.sortOrder.toString(),
+  }
+}
+
 export function bedToForm(bed: Bed): BedFormState {
   return {
     label: bed.label,
-    service: bed.service,
+    roomId: bed.roomId,
     sortOrder: bed.sortOrder.toString(),
   }
 }
@@ -319,6 +414,14 @@ export function accountToForm(account: Account): AccountFormState {
 }
 
 export function bedFormToInput(form: BedFormState) {
+  return {
+    label: form.label,
+    roomId: form.roomId,
+    sortOrder: form.sortOrder.trim() === "" ? undefined : Number(form.sortOrder),
+  }
+}
+
+export function roomFormToInput(form: RoomFormState) {
   return {
     label: form.label,
     service: form.service,

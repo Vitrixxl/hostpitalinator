@@ -22,18 +22,21 @@ import { EmptyState } from "@/components/common/Feedback"
 export function VitalMeasureChart({ panel }: { panel: VitalChartPanel }) {
   const hasValues = panelHasValues(panel)
   const maxDecimals = Math.max(...panel.lines.map((line) => line.decimals))
+  const unit = panel.lines.length === 1 ? panel.lines[0].unit : "mmHg"
 
   return (
-    <div className="min-w-0 rounded-3xl border bg-background p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="min-w-0 rounded-3xl border bg-background p-4 shadow">
+      <div className="mb-5 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-medium">{panel.title}</h3>
-          <p className="text-xs text-muted-foreground">
-            Derniere valeur: {panel.latestValue}
-          </p>
+          <h3 className="flex min-w-0 items-baseline gap-2 text-xl font-semibold leading-tight">
+            <span className="truncate">{panel.title}</span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-sm font-medium text-muted-foreground">
+              {unit}
+            </span>
+          </h3>
         </div>
-        <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-          {panel.lines.length === 1 ? panel.lines[0].unit : "mmHg"}
+        <span className="shrink-0 font-mono text-3xl font-semibold leading-none text-foreground">
+          {panel.latestValue}
         </span>
       </div>
 

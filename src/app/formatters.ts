@@ -43,7 +43,10 @@ export function bedLabelText(bed: Bed | string) {
     return bed
   }
 
-  return bed.service ? `${bed.label} - ${bed.service}` : bed.label
+  const roomLabel = bed.room ? `Chambre ${bed.room}` : "Chambre non renseignee"
+  const label = `${roomLabel}, lit ${bed.label}`
+
+  return bed.service ? `${label} - ${bed.service}` : label
 }
 
 export function formatFileSize(bytes: number) {

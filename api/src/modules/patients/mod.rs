@@ -1,4 +1,5 @@
 use axum::{
+    body::Bytes,
     extract::{Path, Query, State},
     routing::{get, patch},
     Extension, Json, Router,
@@ -8,7 +9,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiError, ApiResult},
+    error::{ApiError, ApiJson, ApiResult},
     modules::{
         auth::{require_service_scope, CurrentAccount},
         services,
@@ -94,6 +95,13 @@ pub struct UpdatePatientRequest {
 pub struct ListPatientsQuery {
     include_archived: Option<bool>,
     q: Option<String>,
+    service: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartNewVisitRequest {
+    bed_id: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -121,12 +129,46 @@ pub fn routes() -> Router<AppState> {
 
 async fn list_patients(
     State(state): State<AppState>,
-    Extension(current_account): Extension<CurrentAccount>,
+    Extension(_current_account): Extension<CurrentAccount>,
     Query(query): Query<ListPatientsQuery>,
 ) -> ApiResult<Json<Vec<Patient>>> {
     let search = query.q.unwrap_or_default();
     let like_search = format!("%{}%", search.trim());
-    let patients = if current_account.role == "admin" && query.include_archived.unwrap_or(false) {
+    let service_filter = match query.service.as_deref() {
+        Some(service) if !service.trim().is_empty() => {
+            Some(services::canonical_service_name(&state, service).await?)
+        }
+        _ => None,
+    };
+    let include_archived = query.include_archived.unwrap_or(false);
+    let patients = if let Some(service) = service_filter {
+        sqlx::query_as::<_, Patient>(
+            r#"
+            SELECT * FROM patients
+            WHERE current_service = ?
+              AND (? OR archived_at IS NULL)
+              AND (? = '%%'
+              OR first_name LIKE ?
+              OR last_name LIKE ?
+              OR email LIKE ?
+              OR phone_number LIKE ?
+              OR address LIKE ?
+              OR apartment_number LIKE ?)
+            ORDER BY last_name ASC, first_name ASC
+            "#,
+        )
+        .bind(service)
+        .bind(include_archived)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
+        .bind(&like_search)
+        .fetch_all(&state.pool)
+        .await?
+    } else if include_archived {
         sqlx::query_as::<_, Patient>(
             r#"
             SELECT * FROM patients
@@ -149,7 +191,7 @@ async fn list_patients(
         .bind(&like_search)
         .fetch_all(&state.pool)
         .await?
-    } else if current_account.role == "admin" {
+    } else {
         sqlx::query_as::<_, Patient>(
             r#"
             SELECT * FROM patients
@@ -173,57 +215,6 @@ async fn list_patients(
         .bind(&like_search)
         .fetch_all(&state.pool)
         .await?
-    } else if query.include_archived.unwrap_or(false) {
-        sqlx::query_as::<_, Patient>(
-            r#"
-            SELECT * FROM patients
-            WHERE current_service = ?
-              AND (? = '%%'
-                OR first_name LIKE ?
-                OR last_name LIKE ?
-                OR email LIKE ?
-                OR phone_number LIKE ?
-                OR address LIKE ?
-                OR apartment_number LIKE ?)
-            ORDER BY last_name ASC, first_name ASC
-            "#,
-        )
-        .bind(&current_account.service)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .fetch_all(&state.pool)
-        .await?
-    } else {
-        sqlx::query_as::<_, Patient>(
-            r#"
-            SELECT * FROM patients
-            WHERE current_service = ?
-              AND archived_at IS NULL
-              AND (? = '%%'
-                OR first_name LIKE ?
-                OR last_name LIKE ?
-                OR email LIKE ?
-                OR phone_number LIKE ?
-                OR address LIKE ?
-                OR apartment_number LIKE ?)
-            ORDER BY last_name ASC, first_name ASC
-            "#,
-        )
-        .bind(&current_account.service)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .fetch_all(&state.pool)
-        .await?
     };
 
     Ok(Json(patients))
@@ -234,14 +225,14 @@ async fn get_patient(
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Patient>> {
-    let patient = require_patient_scope(&state, &id, &current_account).await?;
+    let patient = require_patient_read_scope(&state, &id, &current_account).await?;
     Ok(Json(patient))
 }
 
 async fn create_patient(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Json(payload): Json<CreatePatientRequest>,
+    ApiJson(payload): ApiJson<CreatePatientRequest>,
 ) -> ApiResult<Json<Patient>> {
     payload.validate()?;
 
@@ -312,7 +303,7 @@ async fn update_patient(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
-    Json(payload): Json<UpdatePatientRequest>,
+    ApiJson(payload): ApiJson<UpdatePatientRequest>,
 ) -> ApiResult<Json<Patient>> {
     payload.validate()?;
 
@@ -328,7 +319,7 @@ async fn update_patient(
 
     if requests_bed_assignment && current.current_visit_id.is_none() {
         return Err(ApiError::bad_request(
-            "Cannot assign a bed without an active visit",
+            "Impossible d'affecter un lit sans sejour actif",
         ));
     }
 
@@ -358,13 +349,17 @@ async fn update_patient(
     } else {
         current.current_service.as_str()
     };
-    let current_service = resolve_patient_service(
-        &state,
-        &current_account,
-        requested_service,
-        Some(service_fallback),
-    )
-    .await?;
+    let current_service = if requested_service.is_none() && !should_infer_service_from_bed {
+        current.current_service.clone()
+    } else {
+        resolve_patient_service(
+            &state,
+            &current_account,
+            requested_service,
+            Some(service_fallback),
+        )
+        .await?
+    };
     ensure_bed_matches_service(bed_service.as_deref(), &current_service)?;
 
     let patient = sqlx::query_as::<_, Patient>(
@@ -438,7 +433,7 @@ async fn archive_patient(
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Patient not found"))?;
+    .ok_or_else(|| ApiError::not_found("Patient introuvable"))?;
 
     publish_change(
         &state,
@@ -457,17 +452,40 @@ async fn start_new_visit(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
+    body: Bytes,
 ) -> ApiResult<Json<Patient>> {
     require_patient_scope(&state, &id, &current_account).await?;
 
-    let visit_service = services::canonical_service_name(&state, &current_account.service).await?;
+    let payload = if body.is_empty() {
+        None
+    } else {
+        Some(
+            serde_json::from_slice::<StartNewVisitRequest>(&body)
+                .map_err(|_| ApiError::bad_request("La demande de nouveau sejour est invalide"))?,
+        )
+    };
+    let target_bed_id = payload
+        .and_then(|payload| payload.bed_id)
+        .and_then(normalize_optional);
+    let bed_service = ensure_bed_assignable(&state, target_bed_id.as_deref(), Some(&id)).await?;
+    let service_fallback = bed_service
+        .as_deref()
+        .unwrap_or(current_account.service.as_str());
+    let visit_service = services::canonical_service_name(&state, service_fallback).await?;
+    require_service_scope(&current_account, &visit_service)?;
+    ensure_bed_matches_service(bed_service.as_deref(), &visit_service)?;
+
     let patient = sqlx::query_as::<_, Patient>(
         r#"
         UPDATE patients
         SET current_service = ?,
             current_visit_id = 'VIS-' || strftime('%Y%m%d-%H%M%S', 'now') || '-' || lower(hex(randomblob(2))),
             current_visit_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-            bed_id = CASE WHEN current_service = ? THEN bed_id ELSE NULL END,
+            bed_id = CASE
+              WHEN ? IS NOT NULL THEN ?
+              WHEN current_service = ? THEN bed_id
+              ELSE NULL
+            END,
             archived_at = NULL,
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE id = ?
@@ -475,11 +493,30 @@ async fn start_new_visit(
         "#,
     )
     .bind(&visit_service)
+    .bind(&target_bed_id)
+    .bind(&target_bed_id)
     .bind(&visit_service)
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Patient not found"))?;
+    .ok_or_else(|| ApiError::not_found("Patient introuvable"))?;
+
+    if let Some(visit_id) = patient.current_visit_id.as_deref() {
+        sqlx::query(
+            r#"
+            UPDATE entrance_exams
+            SET visit_id = ?,
+                service = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE patient_id = ?
+            "#,
+        )
+        .bind(visit_id)
+        .bind(&patient.current_service)
+        .bind(&patient.id)
+        .execute(&state.pool)
+        .await?;
+    }
 
     publish_change(
         &state,
@@ -515,7 +552,7 @@ async fn end_visit(
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Patient not found"))?;
+    .ok_or_else(|| ApiError::not_found("Patient introuvable"))?;
 
     publish_change(
         &state,
@@ -537,7 +574,7 @@ pub async fn patient_exists(state: &AppState, patient_id: &str) -> ApiResult<()>
         .await?;
 
     if exists.0 == 0 {
-        return Err(ApiError::not_found("Patient not found"));
+        return Err(ApiError::not_found("Patient introuvable"));
     }
 
     Ok(())
@@ -546,11 +583,17 @@ pub async fn patient_exists(state: &AppState, patient_id: &str) -> ApiResult<()>
 pub async fn require_patient_scope(
     state: &AppState,
     patient_id: &str,
-    account: &CurrentAccount,
+    _account: &CurrentAccount,
 ) -> ApiResult<Patient> {
-    let patient = fetch_patient(state, patient_id).await?;
-    require_service_scope(account, &patient.current_service)?;
-    Ok(patient)
+    fetch_patient(state, patient_id).await
+}
+
+pub async fn require_patient_read_scope(
+    state: &AppState,
+    patient_id: &str,
+    _account: &CurrentAccount,
+) -> ApiResult<Patient> {
+    fetch_patient(state, patient_id).await
 }
 
 async fn ensure_bed_assignable(
@@ -568,7 +611,7 @@ async fn ensure_bed_assignable(
         .await?;
 
     let Some((bed_service,)) = bed_service else {
-        return Err(ApiError::not_found("Bed not found"));
+        return Err(ApiError::not_found("Lit introuvable"));
     };
 
     let occupied = if let Some(patient_id) = patient_id {
@@ -602,7 +645,7 @@ async fn ensure_bed_assignable(
     };
 
     if occupied.is_some() {
-        return Err(ApiError::conflict("Bed is already assigned"));
+        return Err(ApiError::conflict("Ce lit est deja affecte"));
     }
 
     Ok(Some(bed_service))
@@ -613,7 +656,7 @@ async fn fetch_patient(state: &AppState, id: &str) -> ApiResult<Patient> {
         .bind(id)
         .fetch_optional(&state.pool)
         .await?
-        .ok_or_else(|| ApiError::not_found("Patient not found"))
+        .ok_or_else(|| ApiError::not_found("Patient introuvable"))
 }
 
 impl CreatePatientRequest {
@@ -739,7 +782,7 @@ fn ensure_bed_matches_service(bed_service: Option<&str>, patient_service: &str) 
     if let Some(bed_service) = bed_service {
         if bed_service != patient_service {
             return Err(ApiError::bad_request(
-                "Bed must belong to the patient service",
+                "Le lit doit appartenir au service du patient",
             ));
         }
     }

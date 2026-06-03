@@ -1,5 +1,6 @@
 import type {
   Account,
+  AntecedentCategory,
   LabPanelType,
   LabStatus,
   PatientSex,
@@ -8,6 +9,7 @@ import type {
 
 export type PatientTab =
   | "summary"
+  | "entrance"
   | "vitals"
   | "prescriptions"
   | "labs"
@@ -94,6 +96,23 @@ export type EvolutionFormState = {
   content: string
 }
 
+export type AntecedentFormState = {
+  id: string
+  category: AntecedentCategory
+  source: string
+  code: string
+  label: string
+  notes: string
+  referenceQuery: string
+}
+
+export type EntranceExamFormState = {
+  lifestyle: string
+  diseaseHistory: string
+  synthesis: string
+  antecedents: AntecedentFormState[]
+}
+
 export type AccountFormState = {
   name: string
   email: string
@@ -106,9 +125,15 @@ export type ServiceFormState = {
   name: string
 }
 
-export type BedFormState = {
+export type RoomFormState = {
   label: string
   service: string
+  sortOrder: string
+}
+
+export type BedFormState = {
+  label: string
+  roomId: string
   sortOrder: string
 }
 

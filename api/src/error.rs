@@ -1,12 +1,15 @@
 use axum::{
+    extract::{rejection::JsonRejection, FromRequest, Request},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, fmt};
 
 pub type ApiResult<T> = Result<T, ApiError>;
+
+pub struct ApiJson<T>(pub T);
 
 #[derive(Debug)]
 pub enum ApiError {
@@ -70,6 +73,35 @@ impl fmt::Display for ApiError {
 
 impl Error for ApiError {}
 
+impl<S, T> FromRequest<S> for ApiJson<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
+        Json::<T>::from_request(request, state)
+            .await
+            .map(|Json(payload)| Self(payload))
+            .map_err(api_json_rejection)
+    }
+}
+
+fn api_json_rejection(rejection: JsonRejection) -> ApiError {
+    let message = match rejection {
+        JsonRejection::JsonDataError(_) => "Les donnees envoyees sont invalides",
+        JsonRejection::JsonSyntaxError(_) => "Le format JSON de la requete est invalide",
+        JsonRejection::MissingJsonContentType(_) => {
+            "Le corps de la requete doit etre au format JSON"
+        }
+        JsonRejection::BytesRejection(_) => "Le corps de la requete est illisible",
+        _ => "La requete JSON est invalide",
+    };
+
+    ApiError::bad_request(message)
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, code, message) = match self {
@@ -83,7 +115,7 @@ impl IntoResponse for ApiError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "internal_error",
-                    "Internal server error".to_string(),
+                    "Erreur interne du serveur".to_string(),
                 )
             }
         };
@@ -101,7 +133,7 @@ impl IntoResponse for ApiError {
 impl From<sqlx::Error> for ApiError {
     fn from(error: sqlx::Error) -> Self {
         match error {
-            sqlx::Error::RowNotFound => Self::not_found("Resource not found"),
+            sqlx::Error::RowNotFound => Self::not_found("Ressource introuvable"),
             other => Self::internal(other.to_string()),
         }
     }

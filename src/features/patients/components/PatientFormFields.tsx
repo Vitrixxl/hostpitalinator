@@ -1,13 +1,17 @@
-import { useId } from "react"
+import { useId } from "react";
 
-import type { PatientFormState } from "@/app/types"
-import { AddressAutocomplete } from "@/components/common/AddressAutocomplete"
-import { DateTextInput } from "@/components/common/DateInputs"
-import { Field } from "@/components/common/Field"
-import { BedSelect, ServiceSelect, SexSelect } from "@/components/common/FormControls"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import type { Account, Bed, Service } from "@/types"
+import type { PatientFormState } from "@/app/types";
+import { AddressAutocomplete } from "@/components/common/AddressAutocomplete";
+import { DateTextInput } from "@/components/common/DateInputs";
+import { Field } from "@/components/common/Field";
+import {
+  BedSelect,
+  ServiceSelect,
+  SexSelect,
+} from "@/components/common/FormControls";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { Account, Bed, Service } from "@/types";
 
 export function PatientFormFields({
   account,
@@ -19,20 +23,20 @@ export function PatientFormFields({
   services,
   onChange,
 }: {
-  account: Account
-  administrativeRequired?: boolean
-  beds: Bed[]
-  currentPatientId?: string
-  form: PatientFormState
-  showBedField?: boolean
-  services: Service[]
-  onChange: (form: PatientFormState) => void
+  account: Account;
+  administrativeRequired?: boolean;
+  beds: Bed[];
+  currentPatientId?: string;
+  form: PatientFormState;
+  showBedField?: boolean;
+  services: Service[];
+  onChange: (form: PatientFormState) => void;
 }) {
   function updateField(field: keyof PatientFormState, value: string) {
-    onChange({ ...form, [field]: value })
+    onChange({ ...form, [field]: value });
   }
 
-  const addressInputId = useId()
+  const addressInputId = useId();
 
   return (
     <div className="grid gap-3">
@@ -134,5 +138,5 @@ export function PatientFormFields({
         />
       </Field>
     </div>
-  )
+  );
 }

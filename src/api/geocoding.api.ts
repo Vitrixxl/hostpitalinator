@@ -51,7 +51,7 @@ export async function searchAddressSuggestions(
   })
 
   if (!response.ok) {
-    throw new Error("Unable to fetch address suggestions")
+    throw new Error("Suggestions d'adresse indisponibles")
   }
 
   const payload = (await response.json()) as GeocodingSearchResponse

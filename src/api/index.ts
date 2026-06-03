@@ -40,6 +40,13 @@ export {
   listEvolutionNotes,
   type AddEvolutionNoteInput,
 } from "@/api/evolutions.api"
+export {
+  getEntranceExam,
+  listEntranceExams,
+  saveEntranceExam,
+  searchClinicalReferences,
+  type SaveEntranceExamInput,
+} from "@/api/entrance-exams.api"
 export { healthCheck } from "@/api/health.api"
 export {
   searchAddressSuggestions,
@@ -69,6 +76,13 @@ export {
   updateService,
   type ServiceInput,
 } from "@/api/services.api"
+export {
+  createRoom,
+  deleteRoom,
+  listRooms,
+  updateRoom,
+  type RoomInput,
+} from "@/api/rooms.api"
 export {
   addPrescription,
   listPrescriptions,

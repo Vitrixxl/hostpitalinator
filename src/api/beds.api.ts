@@ -1,14 +1,21 @@
 import { callApi } from "@/api/client"
 import type { Bed } from "@/types"
 
-export type CreateBedInput = Pick<Bed, "label" | "service"> & {
+export type CreateBedInput = Pick<Bed, "label" | "roomId"> & {
   sortOrder?: number
 }
 
 export type UpdateBedInput = Partial<CreateBedInput>
 
-export function listBeds() {
-  return callApi<Bed[]>("/beds")
+export function listBeds(options: { service?: string } = {}) {
+  const params = new URLSearchParams()
+
+  if (options.service) {
+    params.set("service", options.service)
+  }
+
+  const query = params.toString()
+  return callApi<Bed[]>(`/beds${query ? `?${query}` : ""}`)
 }
 
 export function createBed(input: CreateBedInput) {

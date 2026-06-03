@@ -8,10 +8,11 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiError, ApiResult},
+    error::{ApiError, ApiJson, ApiResult},
     modules::{
-        auth::CurrentAccount, medicines::find_commercialized_medicine_name,
-        patients::require_patient_scope,
+        auth::CurrentAccount,
+        medicines::find_commercialized_medicine_name,
+        patients::{require_patient_read_scope, require_patient_scope},
     },
     realtime::publish_change,
     state::AppState,
@@ -74,7 +75,7 @@ async fn list_prescriptions(
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
 ) -> ApiResult<Json<Vec<Prescription>>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, &patient_id, &current_account).await?;
 
     let prescriptions = sqlx::query_as::<_, Prescription>(
         "SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY start_date DESC, created_at DESC",
@@ -90,7 +91,7 @@ async fn add_prescription(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
-    Json(payload): Json<AddPrescriptionRequest>,
+    ApiJson(payload): ApiJson<AddPrescriptionRequest>,
 ) -> ApiResult<Json<Prescription>> {
     require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;
@@ -99,7 +100,7 @@ async fn add_prescription(
     let medicine_id = payload.medicine_id.trim();
     let medication = find_commercialized_medicine_name(&state, medicine_id)
         .await?
-        .ok_or_else(|| ApiError::not_found("Medicine not found"))?;
+        .ok_or_else(|| ApiError::not_found("Medicament introuvable"))?;
 
     let prescription = sqlx::query_as::<_, Prescription>(
         r#"
@@ -141,7 +142,7 @@ async fn update_prescription_status(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(id): Path<String>,
-    Json(payload): Json<UpdatePrescriptionStatusRequest>,
+    ApiJson(payload): ApiJson<UpdatePrescriptionStatusRequest>,
 ) -> ApiResult<Json<Prescription>> {
     require_non_empty(&payload.status, "status")?;
 
@@ -149,7 +150,7 @@ async fn update_prescription_status(
         .bind(&id)
         .fetch_optional(&state.pool)
         .await?
-        .ok_or_else(|| ApiError::not_found("Prescription not found"))?;
+        .ok_or_else(|| ApiError::not_found("Prescription introuvable"))?;
     require_patient_scope(&state, &patient_id.0, &current_account).await?;
 
     let prescription = sqlx::query_as::<_, Prescription>(
@@ -164,7 +165,7 @@ async fn update_prescription_status(
     .bind(id)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or_else(|| ApiError::not_found("Prescription not found"))?;
+    .ok_or_else(|| ApiError::not_found("Prescription introuvable"))?;
 
     publish_change(
         &state,

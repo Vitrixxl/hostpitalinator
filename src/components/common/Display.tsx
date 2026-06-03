@@ -39,7 +39,7 @@ export function PatientInfoBadge({ children }: { children: string }) {
 
 export function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border bg-background px-3 py-2">
+    <div className="rounded-3xl border bg-background p-4 shadow">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="truncate text-sm font-medium">{value}</p>
     </div>
@@ -54,7 +54,7 @@ export function ClinicalValue({
   value: string
 }) {
   return (
-    <div className="rounded-3xl border bg-muted/20 p-3">
+    <div className="rounded-3xl border bg-background p-4 shadow">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-medium">{value}</p>
     </div>

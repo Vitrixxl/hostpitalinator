@@ -1,23 +1,23 @@
-import { BedIcon, Building2, Users } from "lucide-react"
+import { BedIcon, Building2, Users } from "lucide-react";
 
 import {
   PATIENT_SEX_LABELS,
   PATIENT_SEXES,
   UNASSIGNED_BED_VALUE,
   UNSELECTED_SERVICE_VALUE,
-} from "@/app/constants"
-import { bedLabelText } from "@/app/formatters"
-import { Input } from "@/components/ui/input"
+} from "@/app/constants";
+import { bedLabelText } from "@/app/formatters";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import type { Bed, Service } from "@/types"
+} from "@/components/ui/select";
+import type { Bed, Service } from "@/types";
 
-import { Field } from "./Field"
+import { Field } from "./Field";
 
 export function NumberField({
   label,
@@ -25,10 +25,10 @@ export function NumberField({
   onChange,
   required = true,
 }: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  required?: boolean
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
 }) {
   return (
     <Field label={label} required={required}>
@@ -40,7 +40,7 @@ export function NumberField({
         onChange={(event) => onChange(event.target.value)}
       />
     </Field>
-  )
+  );
 }
 
 export function SexSelect({
@@ -48,9 +48,9 @@ export function SexSelect({
   onChange,
   required = false,
 }: {
-  value: string
-  onChange: (value: string) => void
-  required?: boolean
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={onChange} required={required}>
@@ -66,7 +66,7 @@ export function SexSelect({
         ))}
       </SelectContent>
     </Select>
-  )
+  );
 }
 
 export function BedSelect({
@@ -76,17 +76,17 @@ export function BedSelect({
   value,
   onChange,
 }: {
-  beds: Bed[]
-  service?: string
-  currentPatientId?: string
-  value: string
-  onChange: (value: string) => void
+  beds: Bed[];
+  service?: string;
+  currentPatientId?: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   const assignableBeds = beds.filter(
     (bed) =>
       (!service || bed.service === service) &&
-      (!bed.occupiedPatientId || bed.occupiedPatientId === currentPatientId)
-  )
+      (!bed.occupiedPatientId || bed.occupiedPatientId === currentPatientId),
+  );
 
   return (
     <Select
@@ -108,7 +108,7 @@ export function BedSelect({
         ))}
       </SelectContent>
     </Select>
-  )
+  );
 }
 
 export function ServiceSelect({
@@ -118,18 +118,18 @@ export function ServiceSelect({
   disabled = false,
   required = false,
 }: {
-  services: Service[]
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
-  required?: boolean
+  services: Service[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  required?: boolean;
 }) {
   return (
     <Select
       value={value || UNSELECTED_SERVICE_VALUE}
       onValueChange={(nextValue) => {
         if (nextValue !== UNSELECTED_SERVICE_VALUE) {
-          onChange(nextValue)
+          onChange(nextValue);
         }
       }}
       disabled={disabled}
@@ -150,5 +150,5 @@ export function ServiceSelect({
         ))}
       </SelectContent>
     </Select>
-  )
+  );
 }

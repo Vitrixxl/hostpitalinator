@@ -12,11 +12,13 @@ import {
   FileText,
   FileUp,
   FlaskConical,
+  ListFilter,
   LogOutIcon,
   Pencil,
   Plus,
   PlusIcon,
   Save,
+  Search,
   Stethoscope,
   Thermometer,
   Trash2,
@@ -35,14 +37,17 @@ import {
   deleteVitalRecord,
   downloadMedicalDocument,
   endPatientVisit,
+  getEntranceExam,
   getLatestVitalRecord,
   getPatient,
   listEvolutionNotes,
+  listEntranceExams,
   listLabResults,
   listMedicalDocuments,
   listPrescriptions,
   listVitalRecords,
   openMedicalDocument,
+  saveEntranceExam,
   setRealtimeContext,
   startNewPatientVisit,
   subscribeRealtime,
@@ -58,6 +63,7 @@ import {
   PATIENT_TAB_VALUES,
   PATIENT_TABS,
   PRESCRIPTION_STATUSES,
+  ROLE_LABELS,
 } from "@/app/constants";
 import {
   dateInput,
@@ -73,11 +79,14 @@ import { filenameFromDisposition, readFileAsDataUrl } from "@/app/file-utils";
 import {
   emptyDocumentForm,
   emptyEvolutionForm,
+  emptyEntranceExamForm,
   emptyLabForm,
   emptyPatientForm,
   emptyPrescriptionFilters,
   emptyPrescriptionForm,
   emptyVitalForm,
+  entranceExamFormToInput,
+  entranceExamToForm,
   patientToForm,
   prescriptionEndDateFromDuration,
   trimPrescriptionMedicationForm,
@@ -90,7 +99,6 @@ import {
   formatFileSize,
   nullableOptionalValue,
   optionalValue,
-  patientSexLabel,
   prescriptionStatusLabel,
   textIncludes,
 } from "@/app/formatters";
@@ -105,8 +113,15 @@ import {
   worstLabStatus,
 } from "@/app/lab-utils";
 import { realtimePageForPatientTab } from "@/app/realtime";
+import {
+  getPatientWorkspaceSnapshot,
+  invalidatePatientWorkspaceSnapshot,
+  peekPatientWorkspaceSnapshot,
+  type PatientWorkspaceSnapshot,
+} from "@/app/patient-prefetch";
 import type {
   DocumentFormState,
+  EntranceExamFormState,
   EvolutionFormState,
   LabFormState,
   LabMarkerRangeFilter,
@@ -114,14 +129,11 @@ import type {
   PatientTab,
   PrescriptionFilters,
   PrescriptionFormState,
+  VitalChartPoint,
   VitalChartPanel,
   VitalFormState,
 } from "@/app/types";
-import {
-  ClinicalValue,
-  MedicalColumnHead,
-  PatientInfoBadge,
-} from "@/components/common/Display";
+import { ClinicalValue, MedicalColumnHead } from "@/components/common/Display";
 import {
   AlertMessage,
   EmptyState,
@@ -134,6 +146,10 @@ import {
 } from "@/components/common/DateInputs";
 import { NumberField } from "@/components/common/FormControls";
 import { LoadingScreen } from "@/components/common/LoadingScreen";
+import {
+  QuickActionDialog,
+  type QuickAction,
+} from "@/components/common/QuickActionDialog";
 import { SectionTitle } from "@/components/common/SectionTitle";
 import { Button } from "@/components/ui/button";
 import {
@@ -175,6 +191,7 @@ import {
 } from "@/components/ui/tooltip";
 import { LabPanelDetailsDialog } from "@/features/labs/components/LabPanelDetailsDialog";
 import { LabPanelDialog } from "@/features/labs/components/LabPanelDialog";
+import { EntranceExamPanel } from "./EntranceExamPanel";
 import { PatientFormFields } from "./PatientFormFields";
 import { PrescriptionForm } from "@/features/prescriptions/components/PrescriptionForm";
 import { VitalMeasureChart } from "@/features/vitals/components/VitalMeasureChart";
@@ -184,6 +201,7 @@ import type {
   Account,
   Bed,
   EvolutionNote,
+  EntranceExamRecord,
   LabPanel,
   LabPanelType,
   MedicalDocument,
@@ -192,6 +210,7 @@ import type {
   PatientSex,
   Prescription,
   Service,
+  UserRole,
   VitalRecord,
 } from "@/types";
 
@@ -213,11 +232,21 @@ const patientTabVariants = {
 };
 
 const PATIENT_UPDATE_TOAST_DURATION_MS = 4200;
+const ENTRANCE_EXAM_HISTORY_PAGE_SIZE = 5;
 
 type PatientUpdateToast = {
   id: string;
   detail: string;
 };
+
+const DEFAULT_EVOLUTION_VITAL_PANEL_IDS = [
+  "temperature",
+  "heart-rate",
+  "blood-pressure",
+  "oxygen-saturation",
+  "weight",
+  "diuresis",
+];
 
 export function PatientWorkspace({
   patientId,
@@ -248,6 +277,15 @@ export function PatientWorkspace({
   const [labs, setLabs] = useState<LabPanel[]>([]);
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [notes, setNotes] = useState<EvolutionNote[]>([]);
+  const [entranceExamForm, setEntranceExamForm] =
+    useState<EntranceExamFormState>(emptyEntranceExamForm());
+  const [hasCurrentEntranceExam, setHasCurrentEntranceExam] = useState(false);
+  const [entranceExamHistory, setEntranceExamHistory] = useState<
+    EntranceExamRecord[]
+  >([]);
+  const [loadingEntranceExamHistory, setLoadingEntranceExamHistory] =
+    useState(false);
+  const [hasMoreEntranceExams, setHasMoreEntranceExams] = useState(true);
   const [selectedLabPanel, setSelectedLabPanel] = useState<LabPanel | null>(
     null,
   );
@@ -255,6 +293,9 @@ export function PatientWorkspace({
     useState<EvolutionNote | null>(null);
   const [evolutionDraftOpen, setEvolutionDraftOpen] = useState(false);
   const [hasEvolutionDraft, setHasEvolutionDraft] = useState(false);
+  const [evolutionVitalPanelIds, setEvolutionVitalPanelIds] = useState<
+    string[]
+  >(DEFAULT_EVOLUTION_VITAL_PANEL_IDS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -276,6 +317,7 @@ export function PatientWorkspace({
   const [placementBedId, setPlacementBedId] = useState("");
   const [endVisitDialogOpen, setEndVisitDialogOpen] = useState(false);
   const [newVisitDialogOpen, setNewVisitDialogOpen] = useState(false);
+  const [quickActionOpen, setQuickActionOpen] = useState(false);
   const [vitalForm, setVitalForm] = useState<VitalFormState>(emptyVitalForm());
   const [editingVitalId, setEditingVitalId] = useState<string | null>(null);
   const [vitalDialogOpen, setVitalDialogOpen] = useState(false);
@@ -307,50 +349,53 @@ export function PatientWorkspace({
     }
   }, [activeTabIndex]);
 
+  const applyWorkspaceSnapshot = useCallback(
+    (snapshot: PatientWorkspaceSnapshot) => {
+      setPatient(snapshot.patient);
+      setPatientForm(patientToForm(snapshot.patient));
+      setLatestVital(snapshot.latestVital);
+      setVitals(snapshot.vitals);
+      setPrescriptions(snapshot.prescriptions);
+      setLabs(snapshot.labs);
+      setDocuments(snapshot.documents);
+      setNotes(snapshot.notes);
+      setEntranceExamForm(entranceExamToForm(snapshot.entranceExam));
+      setHasCurrentEntranceExam(Boolean(snapshot.entranceExam.exam));
+      setEvolutionForm((current) => ({
+        ...current,
+        service: snapshot.patient.currentService || currentAccount.service,
+      }));
+    },
+    [currentAccount.service],
+  );
+
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
     setError("");
 
-    try {
-      const [
-        patientResult,
-        latestVitalResult,
-        vitalResults,
-        prescriptionResults,
-        labResults,
-        documentResults,
-        noteResults,
-      ] = await Promise.all([
-        getPatient(patientId),
-        getLatestVitalRecord(patientId),
-        listVitalRecords(patientId),
-        listPrescriptions(patientId),
-        listLabResults(patientId),
-        listMedicalDocuments(
-          patientId,
-          documentFilter === "all" ? {} : { category: documentFilter },
-        ),
-        listEvolutionNotes(patientId),
-      ]);
+    const cachedSnapshot = peekPatientWorkspaceSnapshot(
+      patientId,
+      documentFilter,
+    );
 
-      setPatient(patientResult);
-      setPatientForm(patientToForm(patientResult));
-      setLatestVital(latestVitalResult);
-      setVitals(vitalResults);
-      setPrescriptions(prescriptionResults);
-      setLabs(labResults);
-      setDocuments(documentResults);
-      setNotes(noteResults);
-      setEvolutionForm((current) => ({
-        ...current,
-        service: patientResult.currentService || currentAccount.service,
-      }));
+    if (cachedSnapshot) {
+      applyWorkspaceSnapshot(cachedSnapshot);
+      setLoading(false);
+    }
+
+    try {
+      const snapshot = await getPatientWorkspaceSnapshot(patientId, {
+        documentFilter,
+        force: Boolean(cachedSnapshot),
+      });
+
+      applyWorkspaceSnapshot(snapshot);
     } catch (loadError) {
       setError(errorMessage(loadError));
     } finally {
       setLoading(false);
     }
-  }, [currentAccount.service, documentFilter, patientId]);
+  }, [applyWorkspaceSnapshot, documentFilter, patientId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -360,17 +405,37 @@ export function PatientWorkspace({
     return () => window.clearTimeout(timeout);
   }, [loadWorkspace]);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setEntranceExamHistory([]);
+      setHasMoreEntranceExams(true);
+      setLoadingEntranceExamHistory(false);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [patientId]);
+
   const refreshPatient = useCallback(async () => {
     try {
       const patientResult = await getPatient(patientId);
+      const visitChanged =
+        patient?.currentVisitId !== patientResult.currentVisitId;
 
       setPatient(patientResult);
       setPatientForm(patientToForm(patientResult));
+      if (visitChanged) {
+        const entranceExam = await getEntranceExam(patientId);
+
+        setEntranceExamForm(entranceExamToForm(entranceExam));
+        setHasCurrentEntranceExam(Boolean(entranceExam.exam));
+        setEntranceExamHistory([]);
+        setHasMoreEntranceExams(true);
+      }
       onPatientChanged();
     } catch (refreshError) {
       setError(errorMessage(refreshError));
     }
-  }, [onPatientChanged, patientId]);
+  }, [onPatientChanged, patient, patientId]);
 
   const refreshVitals = useCallback(async () => {
     try {
@@ -423,6 +488,84 @@ export function PatientWorkspace({
     }
   }, [patientId]);
 
+  const refreshEntranceExam = useCallback(async () => {
+    try {
+      const entranceExam = await getEntranceExam(patientId);
+
+      setEntranceExamForm(entranceExamToForm(entranceExam));
+      setHasCurrentEntranceExam(Boolean(entranceExam.exam));
+    } catch (refreshError) {
+      setError(errorMessage(refreshError));
+    }
+  }, [patientId]);
+
+  const loadEntranceExamHistory = useCallback(
+    async (reset = false) => {
+      setLoadingEntranceExamHistory(true);
+      setError("");
+
+      try {
+        const exams = await listEntranceExams(patientId, {
+          limit: ENTRANCE_EXAM_HISTORY_PAGE_SIZE,
+          offset: reset ? 0 : entranceExamHistory.length,
+        });
+
+        setEntranceExamHistory((current) =>
+          reset ? exams : [...current, ...exams],
+        );
+        setHasMoreEntranceExams(
+          exams.length === ENTRANCE_EXAM_HISTORY_PAGE_SIZE,
+        );
+      } catch (loadError) {
+        setError(errorMessage(loadError));
+        setHasMoreEntranceExams(false);
+      } finally {
+        setLoadingEntranceExamHistory(false);
+      }
+    },
+    [entranceExamHistory.length, patientId],
+  );
+
+  useEffect(() => {
+    if (
+      activeTab !== "entrance" ||
+      entranceExamHistory.length > 0 ||
+      loadingEntranceExamHistory ||
+      !hasMoreEntranceExams
+    ) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void loadEntranceExamHistory(true);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeTab,
+    entranceExamHistory.length,
+    hasMoreEntranceExams,
+    loadEntranceExamHistory,
+    loadingEntranceExamHistory,
+  ]);
+
+  useEffect(() => {
+    if (
+      !requiresEntranceExamBeforeClinicalData(activeTab) ||
+      !patient?.currentVisitId ||
+      hasCurrentEntranceExam
+    ) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      showEntranceExamGateMessage();
+      navigate(`/patients/${patientId}/entrance`, { replace: true });
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeTab, hasCurrentEntranceExam, navigate, patient, patientId]);
+
   const showPatientUpdateToast = useCallback((toast: PatientUpdateToast) => {
     if (patientUpdateToastTimeoutRef.current !== undefined) {
       window.clearTimeout(patientUpdateToastTimeoutRef.current);
@@ -440,6 +583,8 @@ export function PatientWorkspace({
       if (event.patientId !== patientId) {
         return;
       }
+
+      invalidatePatientWorkspaceSnapshot(patientId);
 
       const toast = patientUpdateToastFromRealtimeEvent(event);
 
@@ -459,12 +604,17 @@ export function PatientWorkspace({
         void refreshDocuments();
       } else if (event.entity === "evolutionNote") {
         void refreshEvolutionNotes();
+      } else if (event.entity === "entranceExam") {
+        void refreshEntranceExam();
+        void loadEntranceExamHistory(true);
       }
     },
     [
       patientId,
       refreshDocuments,
       refreshEvolutionNotes,
+      refreshEntranceExam,
+      loadEntranceExamHistory,
       refreshLabs,
       refreshPatient,
       refreshPrescriptions,
@@ -490,162 +640,59 @@ export function PatientWorkspace({
     return subscribeRealtime(handleRealtimeEvent);
   }, [activeTab, handleRealtimeEvent, patientId]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setQuickActionOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const vitalChartData = useMemo(
-    () =>
-      [...vitals].reverse().map((record) => ({
-        label: formatShortDateTime(record.recordedAt),
-        temperature: record.temperature,
-        heartRate: record.heartRate,
-        systolicBloodPressure: record.systolicBloodPressure,
-        diastolicBloodPressure: record.diastolicBloodPressure,
-        oxygenSaturation: record.oxygenSaturation,
-        weight: record.weight,
-        diuresis: record.diuresis ?? null,
-      })),
+    () => vitalRecordsToChartData(vitals),
     [vitals],
   );
 
   const vitalChartPanels = useMemo<VitalChartPanel[]>(
-    () => [
-      {
-        id: "temperature",
-        title: "Temperature",
-        latestValue: latestVital
-          ? `${latestVital.temperature.toFixed(1)} C`
-          : "Non renseignee",
-        emptyLabel: "Aucune temperature renseignee",
-        data: vitalChartData.map((point) => ({
-          label: point.label,
-          value: point.temperature,
-        })),
-        lines: [
-          {
-            dataKey: "value",
-            name: "Temperature",
-            stroke: "var(--chart-4)",
-            unit: "C",
-            decimals: 1,
-          },
-        ],
-      },
-      {
-        id: "heart-rate",
-        title: "Frequence cardiaque",
-        latestValue: latestVital
-          ? `${latestVital.heartRate} bpm`
-          : "Non renseignee",
-        emptyLabel: "Aucune frequence renseignee",
-        data: vitalChartData.map((point) => ({
-          label: point.label,
-          value: point.heartRate,
-        })),
-        lines: [
-          {
-            dataKey: "value",
-            name: "FC",
-            stroke: "var(--chart-2)",
-            unit: "bpm",
-            decimals: 0,
-          },
-        ],
-      },
-      {
-        id: "blood-pressure",
-        title: "Tension arterielle",
-        latestValue: latestVital
-          ? `${latestVital.systolicBloodPressure}/${latestVital.diastolicBloodPressure} mmHg`
-          : "Non renseignee",
-        emptyLabel: "Aucune tension renseignee",
-        data: vitalChartData.map((point) => ({
-          label: point.label,
-          systolic: point.systolicBloodPressure,
-          diastolic: point.diastolicBloodPressure,
-        })),
-        lines: [
-          {
-            dataKey: "systolic",
-            name: "Systolique",
-            stroke: "var(--chart-3)",
-            unit: "mmHg",
-            decimals: 0,
-            labelPosition: "top",
-          },
-          {
-            dataKey: "diastolic",
-            name: "Diastolique",
-            stroke: "var(--chart-5)",
-            unit: "mmHg",
-            decimals: 0,
-            labelPosition: "bottom",
-          },
-        ],
-      },
-      {
-        id: "oxygen-saturation",
-        title: "SpO2",
-        latestValue: latestVital
-          ? `${latestVital.oxygenSaturation.toFixed(0)} %`
-          : "Non renseignee",
-        emptyLabel: "Aucune SpO2 renseignee",
-        data: vitalChartData.map((point) => ({
-          label: point.label,
-          value: point.oxygenSaturation,
-        })),
-        lines: [
-          {
-            dataKey: "value",
-            name: "SpO2",
-            stroke: "var(--chart-1)",
-            unit: "%",
-            decimals: 0,
-          },
-        ],
-      },
-      {
-        id: "weight",
-        title: "Poids",
-        latestValue: latestVital
-          ? `${latestVital.weight.toFixed(1)} kg`
-          : "Non renseigne",
-        emptyLabel: "Aucun poids renseigne",
-        data: vitalChartData.map((point) => ({
-          label: point.label,
-          value: point.weight,
-        })),
-        lines: [
-          {
-            dataKey: "value",
-            name: "Poids",
-            stroke: "var(--chart-3)",
-            unit: "kg",
-            decimals: 1,
-          },
-        ],
-      },
-      {
-        id: "diuresis",
-        title: "Diurese",
-        latestValue:
-          latestVital?.diuresis != null
-            ? `${latestVital.diuresis} ml`
-            : "Non renseignee",
-        emptyLabel: "Aucune diurese renseignee",
-        data: vitalChartData.map((point) => ({
-          label: point.label,
-          value: point.diuresis,
-        })),
-        lines: [
-          {
-            dataKey: "value",
-            name: "Diurese",
-            stroke: "var(--chart-2)",
-            unit: "ml",
-            decimals: 0,
-          },
-        ],
-      },
-    ],
+    () => buildVitalChartPanels(latestVital, vitalChartData),
     [latestVital, vitalChartData],
+  );
+
+  const selectedEvolutionNoteVitals = useMemo(() => {
+    if (!selectedEvolutionNote) {
+      return [];
+    }
+
+    const noteDay = dateInput(selectedEvolutionNote.recordedAt);
+
+    return vitals.filter((record) => dateInput(record.recordedAt) === noteDay);
+  }, [selectedEvolutionNote, vitals]);
+
+  const selectedEvolutionNoteVitalChartData = useMemo(
+    () => vitalRecordsToChartData(selectedEvolutionNoteVitals),
+    [selectedEvolutionNoteVitals],
+  );
+
+  const selectedEvolutionNoteVitalChartPanels = useMemo(
+    () =>
+      buildVitalChartPanels(
+        selectedEvolutionNoteVitals[0] ?? null,
+        selectedEvolutionNoteVitalChartData,
+      ),
+    [selectedEvolutionNoteVitalChartData, selectedEvolutionNoteVitals],
+  );
+
+  const visibleEvolutionNoteVitalChartPanels = useMemo(
+    () =>
+      selectedEvolutionNoteVitalChartPanels.filter((panel) =>
+        evolutionVitalPanelIds.includes(panel.id),
+      ),
+    [evolutionVitalPanelIds, selectedEvolutionNoteVitalChartPanels],
   );
 
   const assignablePlacementBeds = useMemo(() => {
@@ -801,6 +848,7 @@ export function PatientWorkspace({
       });
       setPatient(updated);
       setPatientForm(patientToForm(updated));
+      invalidatePatientWorkspaceSnapshot(patientId);
       onPatientChanged();
     }, "Dossier patient enregistre");
   }
@@ -834,6 +882,7 @@ export function PatientWorkspace({
         setPatient(updated);
         setPatientForm(patientToForm(updated));
         setPlacementDialogOpen(false);
+        invalidatePatientWorkspaceSnapshot(patientId);
         onPatientChanged();
       },
       nextBed ? `Patient place en ${bedLabelText(nextBed)}` : "Lit libere",
@@ -848,6 +897,7 @@ export function PatientWorkspace({
       setPlacementBedId("");
       setPlacementDialogOpen(false);
       setEndVisitDialogOpen(false);
+      invalidatePatientWorkspaceSnapshot(patientId);
       onPatientChanged();
     }, "Visite terminee");
   }
@@ -855,23 +905,51 @@ export function PatientWorkspace({
   async function handleStartNewVisit() {
     await runAction(async () => {
       const updated = await startNewPatientVisit(patientId);
+      const entranceExam = await getEntranceExam(patientId);
+
       setPatient(updated);
       setPatientForm(patientToForm(updated));
+      setEntranceExamForm(entranceExamToForm(entranceExam));
+      setHasCurrentEntranceExam(Boolean(entranceExam.exam));
+      setEntranceExamHistory([]);
+      setHasMoreEntranceExams(true);
       setNewVisitDialogOpen(false);
+      invalidatePatientWorkspaceSnapshot(patientId);
       onPatientChanged();
+      navigate(`/patients/${patientId}/entrance`);
     }, "Nouvelle visite creee");
+  }
+
+  async function handleSaveEntranceExam(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAction(async () => {
+      const saved = await saveEntranceExam(
+        patientId,
+        entranceExamFormToInput(entranceExamForm),
+      );
+
+      setEntranceExamForm(entranceExamToForm(saved));
+      setHasCurrentEntranceExam(Boolean(saved.exam));
+      invalidatePatientWorkspaceSnapshot(patientId);
+      await loadEntranceExamHistory(true);
+    }, "Examen d'entree enregistre");
   }
 
   async function handleArchivePatient() {
     await runAction(async () => {
       const archived = await archivePatient(patientId);
       setPatient(archived);
+      invalidatePatientWorkspaceSnapshot(patientId);
       onPatientChanged();
     }, "Dossier archive");
   }
 
   async function handleSubmitVital(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     await runAction(
       async () => {
         if (editingVitalId) {
@@ -897,12 +975,20 @@ export function PatientWorkspace({
   }
 
   function handleOpenNewVitalDialog() {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     setEditingVitalId(null);
     setVitalForm(emptyVitalForm());
     setVitalDialogOpen(true);
   }
 
   function handleEditVital(record: VitalRecord) {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     if (editingVitalId !== record.id) {
       setEditingVitalId(record.id);
       setVitalForm(vitalRecordToForm(record));
@@ -916,6 +1002,10 @@ export function PatientWorkspace({
   }
 
   async function handleDeleteVital(record: VitalRecord) {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     const confirmed = window.confirm(
       `Supprimer la mesure du ${formatShortDateTime(record.recordedAt)} ?`,
     );
@@ -939,6 +1029,10 @@ export function PatientWorkspace({
 
   async function handleAddPrescription(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     await runAction(
       async () => {
         const medicationInputs = prescriptionForm.medications.map(
@@ -982,14 +1076,32 @@ export function PatientWorkspace({
   }
 
   function handleOpenPrescriptionDialog() {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     setPrescriptionForm(emptyPrescriptionForm());
     setPrescriptionDialogOpen(true);
+  }
+
+  function handleOpenPrescriptionQuickAction() {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
+    setPrescriptionForm(emptyPrescriptionForm());
+    setPrescriptionDialogOpen(true);
+    navigate(`/patients/${patientId}/prescriptions`);
   }
 
   async function handlePrescriptionStatus(
     prescriptionId: string,
     status: string,
   ) {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     await runAction(async () => {
       await updatePrescriptionStatus(prescriptionId, status);
       await loadWorkspace();
@@ -998,6 +1110,10 @@ export function PatientWorkspace({
 
   async function handleAddLab(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     await runAction(async () => {
       const results = labFormResultsToInput(labForm);
 
@@ -1018,6 +1134,10 @@ export function PatientWorkspace({
   }
 
   function handleOpenLabDialog() {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     setLabForm(emptyLabForm());
     setLabDialogOpen(true);
   }
@@ -1046,6 +1166,10 @@ export function PatientWorkspace({
 
   async function handleAddDocument(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     await runAction(async () => {
       const filePayload = documentFile
         ? {
@@ -1098,6 +1222,10 @@ export function PatientWorkspace({
 
   async function handleAddEvolution(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     await runAction(async () => {
       await addEvolutionNote(patientId, {
         service: patient?.currentService ?? currentAccount.service,
@@ -1120,6 +1248,10 @@ export function PatientWorkspace({
   }
 
   function handleStartEvolutionDraft() {
+    if (!ensureEntranceExamBeforeClinicalData()) {
+      return;
+    }
+
     setEvolutionForm((current) => ({
       ...(hasEvolutionDraft
         ? current
@@ -1133,6 +1265,23 @@ export function PatientWorkspace({
     setEvolutionDraftOpen(true);
   }
 
+  function handleStartEvolutionQuickAction() {
+    handleStartEvolutionDraft();
+    navigate(`/patients/${patientId}/evolution`);
+  }
+
+  function handleToggleEvolutionVitalPanel(panelId: string) {
+    setEvolutionVitalPanelIds((current) =>
+      current.includes(panelId)
+        ? current.filter((id) => id !== panelId)
+        : [...current, panelId],
+    );
+  }
+
+  function handleEditPatientQuickAction() {
+    navigate(`/patients/${patientId}/summary`);
+  }
+
   function handleTabChange(value: string) {
     const nextTab = value as PatientTab;
 
@@ -1140,10 +1289,40 @@ export function PatientWorkspace({
       return;
     }
 
+    if (
+      requiresEntranceExamBeforeClinicalData(nextTab) &&
+      entranceExamGateIsActive()
+    ) {
+      showEntranceExamGateMessage();
+      navigate(`/patients/${patientId}/entrance`);
+      return;
+    }
+
     const nextTabIndex = PATIENT_TAB_VALUES.indexOf(nextTab);
     const direction = nextTabIndex > activeTabIndex ? "forward" : "backward";
     setTabDirection(direction);
     navigate(`/patients/${patientId}/${nextTab}`);
+  }
+
+  function entranceExamGateIsActive() {
+    return Boolean(patient?.currentVisitId) && !hasCurrentEntranceExam;
+  }
+
+  function showEntranceExamGateMessage() {
+    setSuccess("");
+    setError(
+      "Enregistrez l'examen d'entree de cette visite avant de modifier les donnees cliniques.",
+    );
+  }
+
+  function ensureEntranceExamBeforeClinicalData() {
+    if (!entranceExamGateIsActive()) {
+      return true;
+    }
+
+    showEntranceExamGateMessage();
+    navigate(`/patients/${patientId}/entrance`);
+    return false;
   }
 
   if (!tab || !activeTabFromRoute) {
@@ -1164,12 +1343,41 @@ export function PatientWorkspace({
   }
 
   const hasActiveVisit = Boolean(patient.currentVisitId);
+  const entranceExamLocked = entranceExamGateIsActive();
   const placementButtonLabel = patient.bedId
     ? "Changer de chambre"
     : "Ajouter a une chambre";
+  const quickActions: QuickAction[] = [
+    {
+      id: "create-current-prescription",
+      label: "Creer une prescription pour le patient en cours",
+      run: handleOpenPrescriptionQuickAction,
+    },
+    {
+      id: "evolution-note",
+      label: "Faire une note d'evolution",
+      run: handleStartEvolutionQuickAction,
+    },
+    {
+      id: "add-prescription",
+      label: "Ajouter une prescription",
+      run: handleOpenPrescriptionQuickAction,
+    },
+    {
+      id: "edit-patient",
+      label: "Modifier les informations",
+      run: handleEditPatientQuickAction,
+    },
+  ];
 
   return (
     <div className="space-y-5">
+      <QuickActionDialog
+        open={quickActionOpen}
+        actions={quickActions}
+        onOpenChange={setQuickActionOpen}
+      />
+
       <AnimatePresence>
         {patientUpdateToast && (
           <motion.div
@@ -1196,7 +1404,7 @@ export function PatientWorkspace({
         )}
       </AnimatePresence>
 
-      <div className="rounded-3xl border bg-muted/20 p-4 flex flex-col gap-2">
+      <div className="flex flex-col gap-2 rounded-3xl border bg-background p-4 shadow">
         <div className="flex gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex gap-2 sm:flex-row sm:items-center">
@@ -1214,7 +1422,20 @@ export function PatientWorkspace({
               </h2>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              className="flex px-2 h-8 w-full min-w-[15rem] items-center gap-3 rounded-full border border-input/60 bg-background/80  text-sm text-muted-foreground shadow-sm transition-[color,box-shadow] hover:bg-background focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/20 focus-visible:outline-none sm:w-72 "
+              onClick={() => setQuickActionOpen(true)}
+            >
+              <Search className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">
+                Actions rapides
+              </span>
+              <kbd className="shrink-0 rounded-lg bg-muted px-1.5 py-0.5 font-mono !text-xs text-foreground ">
+                Ctrl+K
+              </kbd>
+            </button>
             {hasActiveVisit && (
               <Button
                 type="button"
@@ -1254,36 +1475,6 @@ export function PatientWorkspace({
             </Button>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {patient.archivedAt ? (
-            <PatientInfoBadge>Archive</PatientInfoBadge>
-          ) : (
-            <PatientInfoBadge>Actif</PatientInfoBadge>
-          )}
-          <PatientInfoBadge>
-            {hasActiveVisit
-              ? `Visite ${patient.currentVisitId}`
-              : "Aucune visite en cours"}
-          </PatientInfoBadge>
-          <PatientInfoBadge>{`Ne(e) le ${formatDate(patient.birthDate)}`}</PatientInfoBadge>
-          {patient.phoneNumber && (
-            <PatientInfoBadge>{`Tel ${patient.phoneNumber}`}</PatientInfoBadge>
-          )}
-          {patient.email && (
-            <PatientInfoBadge>{patient.email}</PatientInfoBadge>
-          )}
-          <PatientInfoBadge>{`Sexe ${patientSexLabel(patient.sex)}`}</PatientInfoBadge>
-          <PatientInfoBadge>{`Lit ${bedLabel(beds, patient.bedId)}`}</PatientInfoBadge>
-          <PatientInfoBadge>
-            {`Constantes ${
-              latestVital
-                ? formatShortDateTime(latestVital.recordedAt)
-                : "Aucune"
-            }`}
-          </PatientInfoBadge>
-          <PatientInfoBadge>{`Prescriptions ${prescriptions.length}`}</PatientInfoBadge>
-          <PatientInfoBadge>{`Documents ${documents.length}`}</PatientInfoBadge>
-        </div>
       </div>
 
       {error && <AlertMessage message={error} />}
@@ -1309,7 +1500,7 @@ export function PatientWorkspace({
             </DialogHeader>
 
             <div className="grid gap-3">
-              <div className="rounded-3xl border bg-muted/20 p-3">
+              <div className="rounded-3xl border bg-background p-4 shadow">
                 <p className="text-xs text-muted-foreground">Lit actuel</p>
                 <p className="mt-1 font-medium">
                   {bedLabel(beds, patient.bedId)}
@@ -1447,22 +1638,35 @@ export function PatientWorkspace({
       </Dialog>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start rounded-3xl border border-border/70 bg-muted/50 shadow-sm">
+        <TabsList className="flex !h-auto w-full flex-wrap justify-start rounded-3xl border border-border/70 bg-background p-1.5 shadow">
           {PATIENT_TABS.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              aria-disabled={
+                entranceExamLocked &&
+                requiresEntranceExamBeforeClinicalData(tab.value)
+              }
+              className={cn(
+                "shadow-none flex h-8 items-center rounded-lg",
+                entranceExamLocked &&
+                  requiresEntranceExamBeforeClinicalData(tab.value) &&
+                  "opacity-50",
+              )}
+            >
               <tab.icon className="size-4" />
               {tab.label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        <div className="grid overflow-x-hidden">
+        <div className="grid overflow-x-hidden pb-2">
           <AnimatePresence initial={false} custom={tabDirection} mode="sync">
             {activeTab === "summary" && (
               <PatientTabMotion key="summary" direction={tabDirection}>
                 <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
                   <form
-                    className="grid gap-4 rounded-3xl border bg-background p-4"
+                    className="grid gap-4 rounded-3xl border bg-background p-4 shadow"
                     onSubmit={handleUpdatePatient}
                   >
                     <SectionTitle
@@ -1486,7 +1690,7 @@ export function PatientWorkspace({
                     />
                   </form>
 
-                  <section className="space-y-4 rounded-3xl border bg-background p-4">
+                  <section className="space-y-4 rounded-3xl border bg-background p-4 shadow">
                     <SectionTitle icon={Activity} title="Dernieres donnees" />
                     <div className="grid gap-3 sm:grid-cols-2">
                       <ClinicalValue
@@ -1536,6 +1740,23 @@ export function PatientWorkspace({
               </PatientTabMotion>
             )}
 
+            {activeTab === "entrance" && (
+              <PatientTabMotion key="entrance" direction={tabDirection}>
+                <EntranceExamPanel
+                  exams={entranceExamHistory}
+                  form={entranceExamForm}
+                  hasMoreExams={hasMoreEntranceExams}
+                  hasCurrentExam={hasCurrentEntranceExam}
+                  loadingExams={loadingEntranceExamHistory}
+                  patientHasActiveVisit={hasActiveVisit}
+                  currentVisitId={patient.currentVisitId}
+                  onChange={setEntranceExamForm}
+                  onLoadMore={() => void loadEntranceExamHistory()}
+                  onSubmit={handleSaveEntranceExam}
+                />
+              </PatientTabMotion>
+            )}
+
             {activeTab === "vitals" && (
               <PatientTabMotion key="vitals" direction={tabDirection}>
                 <section className="space-y-4">
@@ -1560,7 +1781,7 @@ export function PatientWorkspace({
                       <EmptyState label="Aucune constante" />
                     )}
                   </div>
-                  <div className="overflow-hidden rounded-3xl border bg-background p-4">
+                  <div className="overflow-hidden rounded-3xl border bg-background p-4 shadow">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="font-heading text-sm font-medium">
                         Releve des constantes
@@ -1827,7 +2048,7 @@ export function PatientWorkspace({
             {activeTab === "prescriptions" && (
               <PatientTabMotion key="prescriptions" direction={tabDirection}>
                 <section className="grid gap-4">
-                  <div className="space-y-4 rounded-3xl border bg-background p-4">
+                  <div className="space-y-4 rounded-3xl border bg-background p-4 shadow">
                     <SectionTitle
                       icon={ClipboardList}
                       title="Prescriptions"
@@ -1842,54 +2063,60 @@ export function PatientWorkspace({
                       }
                     />
 
-                    <div className="flex flex-wrap items-end gap-3">
-                      <Field label="Medicament">
-                        <Input
-                          className="w-52 max-w-full"
-                          value={prescriptionFilters.medication}
-                          onChange={(event) =>
-                            setPrescriptionFilters((current) => ({
-                              ...current,
-                              medication: event.target.value,
-                            }))
+                    <div className="grid gap-2">
+                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <ListFilter className="size-3.5" />
+                        Filtres
+                      </div>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <Field label="Medicament">
+                          <Input
+                            className="w-52 max-w-full"
+                            value={prescriptionFilters.medication}
+                            onChange={(event) =>
+                              setPrescriptionFilters((current) => ({
+                                ...current,
+                                medication: event.target.value,
+                              }))
+                            }
+                          />
+                        </Field>
+                        <Field label="Debut min">
+                          <DateTextInput
+                            className="w-40 max-w-full"
+                            value={prescriptionFilters.startDateFrom}
+                            onValueChange={(startDateFrom) =>
+                              setPrescriptionFilters((current) => ({
+                                ...current,
+                                startDateFrom,
+                              }))
+                            }
+                          />
+                        </Field>
+                        <Field label="Debut max">
+                          <DateTextInput
+                            className="w-40 max-w-full"
+                            value={prescriptionFilters.startDateTo}
+                            onValueChange={(startDateTo) =>
+                              setPrescriptionFilters((current) => ({
+                                ...current,
+                                startDateTo,
+                              }))
+                            }
+                          />
+                        </Field>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={!hasPrescriptionFilters}
+                          onClick={() =>
+                            setPrescriptionFilters(emptyPrescriptionFilters())
                           }
-                        />
-                      </Field>
-                      <Field label="Debut min">
-                        <DateTextInput
-                          className="w-40 max-w-full"
-                          value={prescriptionFilters.startDateFrom}
-                          onValueChange={(startDateFrom) =>
-                            setPrescriptionFilters((current) => ({
-                              ...current,
-                              startDateFrom,
-                            }))
-                          }
-                        />
-                      </Field>
-                      <Field label="Debut max">
-                        <DateTextInput
-                          className="w-40 max-w-full"
-                          value={prescriptionFilters.startDateTo}
-                          onValueChange={(startDateTo) =>
-                            setPrescriptionFilters((current) => ({
-                              ...current,
-                              startDateTo,
-                            }))
-                          }
-                        />
-                      </Field>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={!hasPrescriptionFilters}
-                        onClick={() =>
-                          setPrescriptionFilters(emptyPrescriptionFilters())
-                        }
-                      >
-                        <XCircle className="size-4" />
-                        Effacer
-                      </Button>
+                        >
+                          <XCircle className="size-4" />
+                          Effacer
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="overflow-auto">
@@ -1968,7 +2195,7 @@ export function PatientWorkspace({
             {activeTab === "labs" && (
               <PatientTabMotion key="labs" direction={tabDirection}>
                 <section className="grid gap-4">
-                  <div className="space-y-4 rounded-3xl border bg-background p-4">
+                  <div className="space-y-4 rounded-3xl border bg-background p-4 shadow">
                     <SectionTitle
                       icon={FlaskConical}
                       title="Biologie"
@@ -1979,49 +2206,57 @@ export function PatientWorkspace({
                         </Button>
                       }
                     />
-                    <div className="flex flex-wrap items-end gap-3">
-                      <Field label="Type de biologie">
-                        <Select
-                          value={labPanelFilter}
-                          onValueChange={(value) => {
-                            setLabPanelFilter(value as LabPanelType | "all");
-                            setLabMarkerFilters({});
-                          }}
-                        >
-                          <SelectTrigger className="max-w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Tous les bilans</SelectItem>
-                            {LAB_PANEL_TYPES.map((panelType) => (
-                              <SelectItem key={panelType} value={panelType}>
-                                {panelType}
+                    <div className="grid gap-2">
+                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <ListFilter className="size-3.5" />
+                        Filtres
+                      </div>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <Field label="Type de biologie">
+                          <Select
+                            value={labPanelFilter}
+                            onValueChange={(value) => {
+                              setLabPanelFilter(value as LabPanelType | "all");
+                              setLabMarkerFilters({});
+                            }}
+                          >
+                            <SelectTrigger className="max-w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">
+                                Tous les bilans
                               </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Field label="Statut">
-                        <Select
-                          value={labStatusFilter}
-                          onValueChange={setLabStatusFilter}
-                        >
-                          <SelectTrigger className="max-w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Tous statuts</SelectItem>
-                            {LAB_STATUSES.map((status) => (
-                              <SelectItem key={status} value={status}>
-                                {labStatusLabel(status)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
+                              {LAB_PANEL_TYPES.map((panelType) => (
+                                <SelectItem key={panelType} value={panelType}>
+                                  {panelType}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Field label="Statut">
+                          <Select
+                            value={labStatusFilter}
+                            onValueChange={setLabStatusFilter}
+                          >
+                            <SelectTrigger className="max-w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Tous statuts</SelectItem>
+                              {LAB_STATUSES.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {labStatusLabel(status)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                      </div>
                     </div>
                     {labPanelFilter !== "all" && (
-                      <div className="grid gap-2 rounded-3xl border bg-muted/20 p-3">
+                      <div className="grid gap-2 rounded-3xl border bg-background p-4 shadow">
                         <p className="text-xs font-medium text-muted-foreground">
                           Filtres de valeurs
                         </p>
@@ -2181,40 +2416,46 @@ export function PatientWorkspace({
             {activeTab === "documents" && (
               <PatientTabMotion key="documents" direction={tabDirection}>
                 <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
-                  <div className="space-y-4 rounded-3xl border bg-background p-4">
+                  <div className="space-y-4 rounded-3xl border bg-background p-4 shadow">
                     <SectionTitle
                       icon={FileText}
                       title="Documents medicaux"
                       action={
-                        <Select
-                          value={documentFilter}
-                          onValueChange={(value) =>
-                            setDocumentFilter(
-                              value as MedicalDocumentCategory | "all",
-                            )
-                          }
-                        >
-                          <SelectTrigger className="max-w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">
-                              Toutes categories
-                            </SelectItem>
-                            {DOCUMENT_CATEGORIES.map((category) => (
-                              <SelectItem key={category} value={category}>
-                                {DOCUMENT_CATEGORY_LABELS[category]}
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                            <ListFilter className="size-3.5" />
+                            Filtres
+                          </span>
+                          <Select
+                            value={documentFilter}
+                            onValueChange={(value) =>
+                              setDocumentFilter(
+                                value as MedicalDocumentCategory | "all",
+                              )
+                            }
+                          >
+                            <SelectTrigger className="max-w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">
+                                Toutes categories
                               </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                              {DOCUMENT_CATEGORIES.map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {DOCUMENT_CATEGORY_LABELS[category]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       }
                     />
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {documents.map((document) => (
                         <article
                           key={document.id}
-                          className="grid gap-3 rounded-3xl border bg-muted/20 p-3 text-sm"
+                          className="grid gap-3 rounded-3xl border bg-background p-4 text-sm shadow"
                         >
                           <div>
                             <p className="font-medium">{document.title}</p>
@@ -2262,7 +2503,7 @@ export function PatientWorkspace({
                     )}
                   </div>
                   <form
-                    className="grid content-start gap-3 rounded-3xl border bg-background p-4"
+                    className="grid content-start gap-3 rounded-3xl border bg-background p-4 shadow"
                     onSubmit={handleAddDocument}
                   >
                     <SectionTitle icon={FileUp} title="Ajouter un document" />
@@ -2333,7 +2574,7 @@ export function PatientWorkspace({
               <PatientTabMotion key="evolution" direction={tabDirection}>
                 {evolutionDraftOpen ? (
                   <form
-                    className="grid gap-4 rounded-3xl border bg-background p-4"
+                    className="grid gap-4 rounded-3xl border bg-background p-4 shadow"
                     onSubmit={handleAddEvolution}
                   >
                     <div className="grid gap-1">
@@ -2374,12 +2615,12 @@ export function PatientWorkspace({
                     </div>
                   </form>
                 ) : (
-                  <section className="rounded-3xl border bg-background p-4">
+                  <section className="rounded-3xl border bg-background p-4 shadow">
                     <SectionTitle icon={Activity} title="Evolution clinique" />
                     <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
                       <button
                         type="button"
-                        className="group grid aspect-square min-h-56 place-items-center rounded-3xl border border-dashed bg-card p-4 text-center text-primary shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        className="group grid aspect-square min-h-56 place-items-center rounded-3xl border border-dashed bg-background p-4 text-center text-primary shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         aria-label={
                           hasEvolutionDraft
                             ? "Reprendre la note en cours"
@@ -2407,17 +2648,32 @@ export function PatientWorkspace({
                         <button
                           key={note.id}
                           type="button"
-                          className="group grid aspect-square min-h-56 content-start overflow-hidden rounded-3xl border bg-card p-4 text-left text-sm shadow-xs transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          className={cn(
+                            "group grid aspect-square min-h-56 content-start overflow-hidden rounded-3xl border p-4 text-left text-sm shadow transition hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                            evolutionNoteRoleCardClass(note.authorRole),
+                          )}
                           aria-label={`Ouvrir la note du ${formatShortDateTime(
                             note.recordedAt,
                           )}`}
                           onClick={() => setSelectedEvolutionNote(note)}
                         >
-                          <span className="text-4xl leading-none font-semibold text-foreground">
-                            {formatEvolutionNoteDay(note.recordedAt)}
-                          </span>
-                          <span className="mt-1 text-xs font-medium text-muted-foreground uppercase">
-                            {formatEvolutionNoteMonth(note.recordedAt)}
+                          <span className="flex items-start justify-between gap-2">
+                            <span>
+                              <span className="block text-4xl leading-none font-semibold text-foreground">
+                                {formatEvolutionNoteDay(note.recordedAt)}
+                              </span>
+                              <span className="mt-1 block text-xs font-medium text-muted-foreground uppercase">
+                                {formatEvolutionNoteMonth(note.recordedAt)}
+                              </span>
+                            </span>
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full border px-2 py-1 text-xs font-medium",
+                                evolutionNoteRoleBadgeClass(note.authorRole),
+                              )}
+                            >
+                              {evolutionNoteAuthorRoleLabel(note.authorRole)}
+                            </span>
                           </span>
                           <span className="mt-2 truncate font-medium">
                             {note.service} · Passage {note.visitId}
@@ -2440,7 +2696,7 @@ export function PatientWorkspace({
                         }
                       }}
                     >
-                      <DialogContent className="sm:max-w-2xl">
+                      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
                         {selectedEvolutionNote && (
                           <div className="grid gap-5">
                             <DialogHeader>
@@ -2453,12 +2709,73 @@ export function PatientWorkspace({
                               <DialogDescription>
                                 {selectedEvolutionNote.service} · Passage{" "}
                                 {selectedEvolutionNote.visitId} ·{" "}
-                                {selectedEvolutionNote.author}
+                                {selectedEvolutionNote.author} ·{" "}
+                                {evolutionNoteAuthorRoleLabel(
+                                  selectedEvolutionNote.authorRole,
+                                )}
                               </DialogDescription>
                             </DialogHeader>
-                            <div className="max-h-[60vh] overflow-y-auto rounded-3xl border bg-muted/20 p-4 leading-6 whitespace-pre-wrap">
+                            <div className="max-h-[35vh] overflow-y-auto rounded-3xl border bg-background p-4 leading-6 whitespace-pre-wrap shadow">
                               {selectedEvolutionNote.content}
                             </div>
+                            <section className="grid gap-3">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <h3 className="font-heading text-base font-medium">
+                                  Constantes du{" "}
+                                  {formatDate(
+                                    dateInput(selectedEvolutionNote.recordedAt),
+                                  )}
+                                </h3>
+                                <div className="flex flex-wrap gap-2">
+                                  {selectedEvolutionNoteVitalChartPanels.map(
+                                    (panel) => {
+                                      const selected =
+                                        evolutionVitalPanelIds.includes(
+                                          panel.id,
+                                        );
+
+                                      return (
+                                        <Button
+                                          key={panel.id}
+                                          type="button"
+                                          size="xs"
+                                          variant="outline"
+                                          aria-pressed={selected}
+                                          className={cn(
+                                            selected &&
+                                              "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15",
+                                          )}
+                                          onClick={() =>
+                                            handleToggleEvolutionVitalPanel(
+                                              panel.id,
+                                            )
+                                          }
+                                        >
+                                          {panel.title}
+                                        </Button>
+                                      );
+                                    },
+                                  )}
+                                </div>
+                              </div>
+                              {selectedEvolutionNoteVitals.length === 0 ? (
+                                <EmptyState label="Aucune constante sur cette journee" />
+                              ) : visibleEvolutionNoteVitalChartPanels.length >
+                                0 ? (
+                                <div className="grid gap-3 lg:grid-cols-2">
+                                  {visibleEvolutionNoteVitalChartPanels.map(
+                                    (panel) => (
+                                      <VitalMeasureChart
+                                        key={panel.id}
+                                        panel={panel}
+                                      />
+                                    ),
+                                  )}
+                                </div>
+                              ) : (
+                                <EmptyState label="Aucune constante selectionnee" />
+                              )}
+                            </section>
                           </div>
                         )}
                       </DialogContent>
@@ -2484,6 +2801,192 @@ function patientUpdateToastFromRealtimeEvent(
   const detail = patientUpdateToastDetail(event);
 
   return detail ? { id: event.id, detail } : null;
+}
+
+function vitalRecordsToChartData(records: VitalRecord[]): VitalChartPoint[] {
+  return [...records].reverse().map((record) => ({
+    label: formatShortDateTime(record.recordedAt),
+    temperature: record.temperature,
+    heartRate: record.heartRate,
+    systolicBloodPressure: record.systolicBloodPressure,
+    diastolicBloodPressure: record.diastolicBloodPressure,
+    oxygenSaturation: record.oxygenSaturation,
+    weight: record.weight,
+    diuresis: record.diuresis ?? null,
+  }));
+}
+
+function buildVitalChartPanels(
+  latestVital: VitalRecord | null,
+  vitalChartData: VitalChartPoint[],
+): VitalChartPanel[] {
+  return [
+    {
+      id: "temperature",
+      title: "Temperature",
+      latestValue: latestVital
+        ? `${latestVital.temperature.toFixed(1)} C`
+        : "Non renseignee",
+      emptyLabel: "Aucune temperature renseignee",
+      data: vitalChartData.map((point) => ({
+        label: point.label,
+        value: point.temperature,
+      })),
+      lines: [
+        {
+          dataKey: "value",
+          name: "Temperature",
+          stroke: "var(--chart-4)",
+          unit: "C",
+          decimals: 1,
+        },
+      ],
+    },
+    {
+      id: "heart-rate",
+      title: "Frequence cardiaque",
+      latestValue: latestVital
+        ? `${latestVital.heartRate} bpm`
+        : "Non renseignee",
+      emptyLabel: "Aucune frequence renseignee",
+      data: vitalChartData.map((point) => ({
+        label: point.label,
+        value: point.heartRate,
+      })),
+      lines: [
+        {
+          dataKey: "value",
+          name: "FC",
+          stroke: "var(--chart-2)",
+          unit: "bpm",
+          decimals: 0,
+        },
+      ],
+    },
+    {
+      id: "blood-pressure",
+      title: "Tension arterielle",
+      latestValue: latestVital
+        ? `${latestVital.systolicBloodPressure}/${latestVital.diastolicBloodPressure} mmHg`
+        : "Non renseignee",
+      emptyLabel: "Aucune tension renseignee",
+      data: vitalChartData.map((point) => ({
+        label: point.label,
+        systolic: point.systolicBloodPressure,
+        diastolic: point.diastolicBloodPressure,
+      })),
+      lines: [
+        {
+          dataKey: "systolic",
+          name: "Systolique",
+          stroke: "var(--chart-3)",
+          unit: "mmHg",
+          decimals: 0,
+          labelPosition: "top",
+        },
+        {
+          dataKey: "diastolic",
+          name: "Diastolique",
+          stroke: "var(--chart-5)",
+          unit: "mmHg",
+          decimals: 0,
+          labelPosition: "bottom",
+        },
+      ],
+    },
+    {
+      id: "oxygen-saturation",
+      title: "SpO2",
+      latestValue: latestVital
+        ? `${latestVital.oxygenSaturation.toFixed(0)} %`
+        : "Non renseignee",
+      emptyLabel: "Aucune SpO2 renseignee",
+      data: vitalChartData.map((point) => ({
+        label: point.label,
+        value: point.oxygenSaturation,
+      })),
+      lines: [
+        {
+          dataKey: "value",
+          name: "SpO2",
+          stroke: "var(--chart-1)",
+          unit: "%",
+          decimals: 0,
+        },
+      ],
+    },
+    {
+      id: "weight",
+      title: "Poids",
+      latestValue: latestVital
+        ? `${latestVital.weight.toFixed(1)} kg`
+        : "Non renseigne",
+      emptyLabel: "Aucun poids renseigne",
+      data: vitalChartData.map((point) => ({
+        label: point.label,
+        value: point.weight,
+      })),
+      lines: [
+        {
+          dataKey: "value",
+          name: "Poids",
+          stroke: "var(--chart-3)",
+          unit: "kg",
+          decimals: 1,
+        },
+      ],
+    },
+    {
+      id: "diuresis",
+      title: "Diurese",
+      latestValue:
+        latestVital?.diuresis != null
+          ? `${latestVital.diuresis} ml`
+          : "Non renseignee",
+      emptyLabel: "Aucune diurese renseignee",
+      data: vitalChartData.map((point) => ({
+        label: point.label,
+        value: point.diuresis,
+      })),
+      lines: [
+        {
+          dataKey: "value",
+          name: "Diurese",
+          stroke: "var(--chart-2)",
+          unit: "ml",
+          decimals: 0,
+        },
+      ],
+    },
+  ];
+}
+
+function evolutionNoteAuthorRoleLabel(role: UserRole | undefined) {
+  return role ? ROLE_LABELS[role] : "Auteur";
+}
+
+function evolutionNoteRoleCardClass(role: UserRole | undefined) {
+  if (role === "doctor") {
+    return "border-sky-200 bg-sky-50/70 hover:border-sky-300 hover:bg-sky-50 dark:border-sky-900/60 dark:bg-sky-950/20";
+  }
+
+  if (role === "nurse") {
+    return "border-emerald-200 bg-emerald-50/70 hover:border-emerald-300 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20";
+  }
+
+  return "border-border bg-background hover:border-primary/40 hover:bg-muted/30";
+}
+
+function evolutionNoteRoleBadgeClass(role: UserRole | undefined) {
+  if (role === "doctor") {
+    return "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300";
+  }
+
+  if (role === "nurse") {
+    return "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300";
+  }
+
+  return "border-border bg-muted text-muted-foreground";
 }
 
 function patientUpdateToastDetail(event: RealtimeEvent) {
@@ -2587,4 +3090,8 @@ function PatientTabMotion({
 
 function isPatientTab(value: string | undefined): value is PatientTab {
   return PATIENT_TAB_VALUES.includes(value as PatientTab);
+}
+
+function requiresEntranceExamBeforeClinicalData(tab: PatientTab) {
+  return !["summary", "entrance"].includes(tab);
 }

@@ -8,10 +8,10 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::ApiResult,
+    error::{ApiJson, ApiResult},
     modules::{
         auth::CurrentAccount,
-        patients::{require_patient_scope, Patient},
+        patients::{require_patient_read_scope, require_patient_scope, Patient},
     },
     realtime::publish_change,
     state::AppState,
@@ -72,7 +72,7 @@ async fn list_vital_records(
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
 ) -> ApiResult<Json<Vec<VitalRecord>>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, &patient_id, &current_account).await?;
 
     let records = sqlx::query_as::<_, VitalRecord>(
         "SELECT * FROM vital_records WHERE patient_id = ? ORDER BY recorded_at DESC, created_at DESC",
@@ -89,7 +89,7 @@ async fn get_latest_vital_record(
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
 ) -> ApiResult<Json<Option<VitalRecord>>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, &patient_id, &current_account).await?;
 
     let record = sqlx::query_as::<_, VitalRecord>(
         "SELECT * FROM vital_records WHERE patient_id = ? ORDER BY recorded_at DESC, created_at DESC LIMIT 1",
@@ -105,7 +105,7 @@ async fn add_vital_record(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path(patient_id): Path<String>,
-    Json(payload): Json<AddVitalRecordRequest>,
+    ApiJson(payload): ApiJson<AddVitalRecordRequest>,
 ) -> ApiResult<Json<VitalRecord>> {
     require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;
@@ -165,7 +165,7 @@ async fn update_vital_record(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
     Path((patient_id, id)): Path<(String, String)>,
-    Json(payload): Json<AddVitalRecordRequest>,
+    ApiJson(payload): ApiJson<AddVitalRecordRequest>,
 ) -> ApiResult<Json<VitalRecord>> {
     require_patient_scope(&state, &patient_id, &current_account).await?;
     payload.validate()?;

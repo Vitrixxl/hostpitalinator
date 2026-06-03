@@ -1,78 +1,77 @@
-import { useState } from "react"
-import type { FormEvent } from "react"
-import { ShieldCheck, Stethoscope, UserPlus, RefreshCw } from "lucide-react"
+import { useState } from "react";
+import type { FormEvent } from "react";
+import { ShieldCheck, Stethoscope, UserPlus, RefreshCw } from "lucide-react";
 
-import { bootstrapAdmin, login } from "@/api"
-import { errorMessage } from "@/app/error-utils"
-import { AlertMessage } from "@/components/common/Feedback"
-import { Field } from "@/components/common/Field"
-import { Button } from "@/components/ui/button"
+import { bootstrapAdmin, login } from "@/api";
+import { errorMessage } from "@/app/error-utils";
+import { AlertMessage } from "@/components/common/Feedback";
+import { Field } from "@/components/common/Field";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import type { Account } from "@/types"
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import type { Account } from "@/types";
 
 export function AuthScreen({
   initialError,
   onAuthenticated,
 }: {
-  initialError: string
-  onAuthenticated: (account: Account) => void
+  initialError: string;
+  onAuthenticated: (account: Account) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "bootstrap">("login")
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" })
+  const [mode, setMode] = useState<"login" | "bootstrap">("login");
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [bootstrapForm, setBootstrapForm] = useState({
     name: "",
     email: "",
     service: "",
-  })
-  const [generatedPassword, setGeneratedPassword] = useState("")
-  const [message, setMessage] = useState(initialError)
-  const [busy, setBusy] = useState(false)
+  });
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [message, setMessage] = useState(initialError);
+  const [busy, setBusy] = useState(false);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setMessage("")
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
 
     try {
-      const session = await login(loginForm.email, loginForm.password)
-      onAuthenticated(session.account)
+      const session = await login(loginForm.email, loginForm.password);
+      onAuthenticated(session.account);
     } catch (error) {
-      setMessage(errorMessage(error))
+      setMessage(errorMessage(error));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function handleBootstrap(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setMessage("")
-    setGeneratedPassword("")
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    setGeneratedPassword("");
 
     try {
       const result = await bootstrapAdmin({
         name: bootstrapForm.name,
         email: bootstrapForm.email,
         service: bootstrapForm.service,
-      })
-      setGeneratedPassword(result.generatedPassword)
+      });
+      setGeneratedPassword(result.generatedPassword);
       setLoginForm({
         email: result.account.email,
         password: result.generatedPassword,
-      })
-      setMode("login")
-      setMessage("Compte administrateur cree. Le mot de passe est pret.")
+      });
+      setMode("login");
     } catch (error) {
-      setMessage(errorMessage(error))
+      setMessage(errorMessage(error));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -216,5 +215,5 @@ export function AuthScreen({
         </Card>
       </div>
     </main>
-  )
+  );
 }
