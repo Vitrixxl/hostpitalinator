@@ -85,6 +85,8 @@ import type { Account, Bed, Patient, Room, Service, UserRole } from "@/types"
 const ALL_SERVICES = "__all_services__"
 const ALL_ROLES = "__all_roles__"
 
+type RoomWithBeds = Room & { beds: Bed[] }
+
 type AdminView =
   | { type: "home" }
   | { type: "personnel" }
@@ -117,9 +119,6 @@ export function AdminPanel({
   const [editForm, setEditForm] = useState<AccountFormState>(emptyAccountForm())
   const [createServiceForm, setCreateServiceForm] = useState<ServiceFormState>(
     emptyServiceForm()
-  )
-  const [createRoomForm, setCreateRoomForm] = useState<RoomFormState>(
-    emptyRoomForm()
   )
   const [roomEditForm, setRoomEditForm] = useState<RoomFormState>(
     emptyRoomForm()
@@ -209,11 +208,6 @@ export function AdminPanel({
       setRooms(roomResult)
       setBeds(bedResult)
       setCreateForm((current) =>
-        current.service || !firstServiceName
-          ? current
-          : { ...current, service: firstServiceName }
-      )
-      setCreateRoomForm((current) =>
         current.service || !firstServiceName
           ? current
           : { ...current, service: firstServiceName }
@@ -402,11 +396,15 @@ export function AdminPanel({
     }, "Service supprimé")
   }
 
-  async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function handleCreateRoom() {
     await runAdminAction(async () => {
-      const room = await createRoom(roomFormToInput(createRoomForm))
-      setCreateRoomForm(emptyRoomForm(defaultServiceName))
+      const service = defaultServiceName
+      const serviceRooms = rooms.filter((room) => room.service === service)
+      const room = await createRoom({
+        label: nextRoomDraftLabel(serviceRooms),
+        service,
+        sortOrder: nextRoomSortOrder(serviceRooms),
+      })
       await loadCatalog()
       onCatalogChanged()
       navigate(`/admin/chambres/${room.id}`)
@@ -568,12 +566,10 @@ export function AdminPanel({
       {view.type === "rooms" && (
         <RoomsPage
           beds={beds}
-          createRoomForm={createRoomForm}
           rooms={rooms}
           services={services}
-          onCreateRoom={(event) => void handleCreateRoom(event)}
+          onCreateRoom={() => void handleCreateRoom()}
           onEditRoom={(roomId) => navigate(`/admin/chambres/${roomId}`)}
-          onSetCreateRoomForm={setCreateRoomForm}
         />
       )}
 
@@ -981,44 +977,27 @@ function PersonnelPage({
 
 function RoomsPage({
   beds,
-  createRoomForm,
   rooms,
   services,
   onCreateRoom,
   onEditRoom,
-  onSetCreateRoomForm,
 }: {
   beds: Bed[]
-  createRoomForm: RoomFormState
   rooms: Room[]
   services: Service[]
-  onCreateRoom: (event: FormEvent<HTMLFormElement>) => void
+  onCreateRoom: () => void
   onEditRoom: (roomId: string) => void
-  onSetCreateRoomForm: (form: RoomFormState) => void
 }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
+    <section>
       <AdminRoomGrid
         beds={beds}
+        canCreateRoom={services.length > 0}
         rooms={rooms}
         serviceName=""
+        onCreateRoom={onCreateRoom}
         onEditRoom={onEditRoom}
       />
-      <form
-        className="grid content-start gap-3 rounded-lg border bg-background p-4 shadow"
-        onSubmit={onCreateRoom}
-      >
-        <SectionTitle icon={Plus} title="Nouvelle chambre" />
-        <RoomFields
-          form={createRoomForm}
-          services={services}
-          onChange={onSetCreateRoomForm}
-        />
-        <Button type="submit" disabled={services.length === 0}>
-          <Plus className="size-4" />
-          Créer
-        </Button>
-      </form>
     </section>
   )
 }
@@ -1382,17 +1361,47 @@ function ServiceCard({
 
 function AdminRoomGrid({
   beds,
+  canCreateRoom = false,
   rooms,
   serviceName,
+  onCreateRoom,
   onEditRoom,
 }: {
   beds: Bed[]
+  canCreateRoom?: boolean
   rooms: Room[]
   serviceName: string
+  onCreateRoom?: () => void
   onEditRoom: (roomId: string) => void
 }) {
   const groupedRooms = useMemo(() => groupRoomsWithBeds(rooms, beds), [beds, rooms])
+  const gridItems = useMemo<Array<RoomWithBeds | null>>(
+    () => (onCreateRoom ? [...groupedRooms, null] : groupedRooms),
+    [groupedRooms, onCreateRoom]
+  )
+  const mobileColumns = useMemo(() => distributeGridItems(gridItems, 1), [gridItems])
+  const tabletColumns = useMemo(() => distributeGridItems(gridItems, 2), [gridItems])
+  const desktopColumns = useMemo(() => distributeGridItems(gridItems, 3), [gridItems])
   const occupiedCount = beds.filter((bed) => bed.occupiedPatientId).length
+  const renderColumn = (items: Array<RoomWithBeds | null>, columnIndex: number) => (
+    <div key={columnIndex} className="flex min-w-0 flex-col gap-4">
+      {items.map((item, itemIndex) =>
+        item ? (
+          <AdminRoomCard
+            key={item.id}
+            room={item}
+            onEditRoom={onEditRoom}
+          />
+        ) : (
+          <NewRoomPlaceholder
+            key={`new-room-${columnIndex}-${itemIndex}`}
+            disabled={!canCreateRoom}
+            onCreateRoom={onCreateRoom}
+          />
+        )
+      )}
+    </div>
+  )
 
   return (
     <section className="space-y-4">
@@ -1413,95 +1422,133 @@ function AdminRoomGrid({
         </div>
       </div>
 
-      {groupedRooms.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {groupedRooms.map((room) => (
-            <div
-              key={room.id}
-              className="flex min-h-56 flex-col rounded-lg border bg-background p-4 shadow"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-heading text-lg font-medium">
-                    Chambre {room.label}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {room.service} · {room.beds.length} lit
-                    {room.beds.length > 1 ? "s" : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge variant="secondary">
-                    {room.beds.filter((bed) => bed.occupiedPatientId).length}/
-                    {room.beds.length}
-                  </Badge>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-lg"
-                    onClick={() => onEditRoom(room.id)}
-                    aria-label={`Modifier la chambre ${room.label}`}
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-3 grid min-h-0 flex-1 content-start gap-2">
-                {room.beds.length > 0 ? (
-                  room.beds.map((bed) => {
-                    const occupied = Boolean(bed.occupiedPatientId)
-                    const occupiedStyle =
-                      bed.occupiedPatientSex === "female"
-                        ? "justify-between gap-3 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-400/40 dark:bg-pink-950/30 dark:text-pink-200"
-                        : "justify-between gap-3 border-primary/30 bg-primary/10 text-primary"
-
-                    return (
-                      <div
-                        key={bed.id}
-                        className={cn(
-                          "relative flex h-16 min-w-0 items-center rounded-xl border px-3 text-left text-sm",
-                          occupied
-                            ? occupiedStyle
-                            : "justify-between border-dashed border-input bg-transparent text-muted-foreground"
-                        )}
-                      >
-                        {occupied ? (
-                          <>
-                            <span className="min-w-0">
-                              <span className="block truncate text-xs font-medium">
-                                Lit {bed.label}
-                              </span>
-                              <span className="mt-0.5 block truncate text-sm font-medium">
-                                {bed.occupiedPatientName ?? "Patient assigné"}
-                              </span>
-                            </span>
-                            <span className="shrink-0 text-xs">Occupé</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-xs font-medium">
-                              Lit {bed.label}
-                            </span>
-                            <span className="text-sm font-medium">Libre</span>
-                          </>
-                        )}
-                      </div>
-                    )
-                  })
-                ) : (
-                  <div className="flex h-16 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
-                    Aucun lit
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+      {gridItems.length > 0 ? (
+        <>
+          <div className="grid gap-4 sm:hidden">
+            {mobileColumns.map(renderColumn)}
+          </div>
+          <div className="hidden gap-4 sm:grid sm:grid-cols-2 xl:hidden">
+            {tabletColumns.map(renderColumn)}
+          </div>
+          <div className="hidden gap-4 xl:grid xl:grid-cols-3">
+            {desktopColumns.map(renderColumn)}
+          </div>
+        </>
       ) : (
         <EmptyState label="Aucune chambre" />
       )}
     </section>
+  )
+}
+
+function AdminRoomCard({
+  room,
+  onEditRoom,
+}: {
+  room: RoomWithBeds
+  onEditRoom: (roomId: string) => void
+}) {
+  return (
+    <div className="flex min-h-56 flex-col rounded-lg border bg-background p-4 shadow">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-heading text-lg font-medium">
+            Chambre {room.label}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {room.service} · {room.beds.length} lit
+            {room.beds.length > 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant="secondary">
+            {room.beds.filter((bed) => bed.occupiedPatientId).length}/
+            {room.beds.length}
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            onClick={() => onEditRoom(room.id)}
+            aria-label={`Modifier la chambre ${room.label}`}
+          >
+            <Pencil className="size-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid min-h-0 flex-1 content-start gap-2">
+        {room.beds.length > 0 ? (
+          room.beds.map((bed) => {
+            const occupied = Boolean(bed.occupiedPatientId)
+            const occupiedStyle =
+              bed.occupiedPatientSex === "female"
+                ? "justify-between gap-3 border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-400/40 dark:bg-pink-950/30 dark:text-pink-200"
+                : "justify-between gap-3 border-primary/30 bg-primary/10 text-primary"
+
+            return (
+              <div
+                key={bed.id}
+                className={cn(
+                  "relative flex h-16 min-w-0 items-center rounded-xl border px-3 text-left text-sm",
+                  occupied
+                    ? occupiedStyle
+                    : "justify-between border-dashed border-input bg-transparent text-muted-foreground"
+                )}
+              >
+                {occupied ? (
+                  <>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-medium">
+                        Lit {bed.label}
+                      </span>
+                      <span className="mt-0.5 block truncate text-sm font-medium">
+                        {bed.occupiedPatientName ?? "Patient assigné"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs">Occupé</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs font-medium">Lit {bed.label}</span>
+                    <span className="text-sm font-medium">Libre</span>
+                  </>
+                )}
+              </div>
+            )
+          })
+        ) : (
+          <div className="flex h-16 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+            Aucun lit
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function NewRoomPlaceholder({
+  disabled,
+  onCreateRoom,
+}: {
+  disabled: boolean
+  onCreateRoom?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-input bg-background/60 p-4 text-center text-muted-foreground shadow-sm transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-input disabled:hover:bg-background/60 disabled:hover:text-muted-foreground"
+      disabled={disabled}
+      onClick={onCreateRoom}
+      aria-label="Créer une nouvelle chambre"
+    >
+      <span className="flex size-11 items-center justify-center rounded-full border border-dashed border-current">
+        <Plus className="size-5" />
+      </span>
+      <span className="font-heading text-base font-medium">
+        Nouvelle chambre
+      </span>
+    </button>
   )
 }
 
@@ -1721,7 +1768,7 @@ function parseAdminView(pathname: string): AdminView {
   return { type: "unknown" }
 }
 
-function groupRoomsWithBeds(rooms: Room[], beds: Bed[]) {
+function groupRoomsWithBeds(rooms: Room[], beds: Bed[]): RoomWithBeds[] {
   return [...rooms]
     .sort(
       (left, right) =>
@@ -1733,6 +1780,41 @@ function groupRoomsWithBeds(rooms: Room[], beds: Bed[]) {
       ...room,
       beds: beds.filter((bed) => bed.roomId === room.id).sort(compareBeds),
     }))
+}
+
+function distributeGridItems<T>(items: T[], columnCount: number) {
+  const columns = Array.from({ length: columnCount }, () => [] as T[])
+
+  items.forEach((item, index) => {
+    columns[index % columnCount].push(item)
+  })
+
+  return columns
+}
+
+function nextRoomDraftLabel(rooms: Room[]) {
+  const baseLabel = "Nouvelle chambre"
+  const existingLabels = new Set(
+    rooms.map((room) => room.label.trim().toLocaleLowerCase())
+  )
+
+  if (!existingLabels.has(baseLabel.toLocaleLowerCase())) {
+    return baseLabel
+  }
+
+  let index = 2
+
+  while (existingLabels.has(`${baseLabel} ${index}`.toLocaleLowerCase())) {
+    index += 1
+  }
+
+  return `${baseLabel} ${index}`
+}
+
+function nextRoomSortOrder(rooms: Room[]) {
+  const highestSortOrder = Math.max(0, ...rooms.map((room) => room.sortOrder))
+
+  return highestSortOrder + 1
 }
 
 function compareBeds(left: Bed, right: Bed) {
