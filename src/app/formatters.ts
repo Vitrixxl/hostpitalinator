@@ -1,6 +1,7 @@
 import type { Bed, PatientSex } from "@/types"
 
 import { PATIENT_SEX_LABELS, PRESCRIPTION_STATUS_LABELS } from "./constants"
+import { richTextToPlainText } from "./rich-text"
 
 export function patientSexLabel(sex?: PatientSex | null) {
   return sex ? PATIENT_SEX_LABELS[sex] ?? sex : "Non renseigné"
@@ -27,7 +28,9 @@ export function textIncludes(value: string, filter: string) {
     return true
   }
 
-  return value.toLocaleLowerCase().includes(normalizedFilter)
+  return richTextToPlainText(value)
+    .toLocaleLowerCase()
+    .includes(normalizedFilter)
 }
 
 export function bedLabel(beds: Bed[], bedId?: string | null) {

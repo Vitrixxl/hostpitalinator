@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
+import { Controller, useForm } from "react-hook-form";
+import type {
+  Control,
+  FieldErrors,
+  UseFormRegister,
+  UseFormReturn,
+} from "react-hook-form";
 import { LayoutGroup, motion, Reorder, useDragControls } from "motion/react";
 import {
   ArrowLeft,
@@ -9,7 +16,6 @@ import {
   GripVertical,
   KeyRound,
   Plus,
-  RefreshCw,
   Save,
   Search,
   ShieldCheck,
@@ -37,13 +43,17 @@ import {
   listRooms,
   listServices,
   resetAccountPassword,
+  setRealtimeContext,
+  subscribeRealtime,
   updateAccount,
   updateBed,
   updateRoom,
   updateService,
+  type RealtimeEvent,
 } from "@/api";
 import { ACCOUNT_STATUS_LABELS, ROLE_LABELS } from "@/app/constants";
 import { errorMessage } from "@/app/error-utils";
+import { validateRequired, validateRequiredEmail } from "@/app/form-validation";
 import {
   accountToForm,
   emptyAccountForm,
@@ -77,6 +87,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableEmptyRow,
   TableHead,
   TableHeader,
   TableRow,
@@ -105,7 +116,7 @@ type EditableBedModel = {
   persistedId?: string;
   label: string;
   sortOrder: number;
-  occupiedPatientId?: string | null;
+  occupiedPatientId?: Bed["occupiedPatientId"];
   occupiedPatientName?: string | null;
   occupiedPatientSex?: Bed["occupiedPatientSex"];
 };
@@ -131,14 +142,23 @@ export function AdminPanel({
   const [rooms, setRooms] = useState<Room[]>([]);
   const [beds, setBeds] = useState<Bed[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [includeDisabled, setIncludeDisabled] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(
     null,
   );
   const [createForm, setCreateForm] =
     useState<AccountFormState>(emptyAccountForm());
   const [editForm, setEditForm] =
     useState<AccountFormState>(emptyAccountForm());
+  const createAccountForm = useForm<AccountFormState>({
+    values: createForm,
+    mode: "onSubmit",
+    reValidateMode: "onChange",
+  });
+  const editAccountForm = useForm<AccountFormState>({
+    values: editForm,
+    mode: "onSubmit",
+    reValidateMode: "onChange",
+  });
   const [createServiceForm, setCreateServiceForm] =
     useState<ServiceFormState>(emptyServiceForm());
   const [draftRooms, setDraftRooms] = useState<EditableRoomCardModel[]>([]);
@@ -153,8 +173,6 @@ export function AdminPanel({
   const [personnelRole, setPersonnelRole] = useState(ALL_ROLES);
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [loading, setLoading] = useState(true);
-  const [catalogLoading, setCatalogLoading] = useState(true);
-  const [patientLoading, setPatientLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -189,7 +207,7 @@ export function AdminPanel({
     setError("");
 
     try {
-      const result = await listAccounts({ includeDisabled });
+      const result = await listAccounts({ includeDisabled: true });
       setAccounts(result);
       setSelectedAccountId((current) => {
         if (current && result.some((account) => account.id === current)) {
@@ -203,10 +221,9 @@ export function AdminPanel({
     } finally {
       setLoading(false);
     }
-  }, [includeDisabled]);
+  }, []);
 
   const loadCatalog = useCallback(async () => {
-    setCatalogLoading(true);
     setError("");
 
     try {
@@ -226,20 +243,14 @@ export function AdminPanel({
       );
     } catch (loadError) {
       setError(errorMessage(loadError));
-    } finally {
-      setCatalogLoading(false);
     }
   }, []);
 
   const loadPatients = useCallback(async () => {
-    setPatientLoading(true);
-
     try {
       setPatients(await listPatients());
     } catch (loadError) {
       setError(errorMessage(loadError));
-    } finally {
-      setPatientLoading(false);
     }
   }, []);
 
@@ -249,11 +260,44 @@ export function AdminPanel({
     void loadPatients();
   }, [loadAccounts, loadCatalog, loadPatients]);
 
+  const handleRealtimeEvent = useCallback(
+    (event: RealtimeEvent) => {
+      if (event.entity === "account") {
+        void loadAccounts();
+        return;
+      }
+
+      if (event.entity === "service") {
+        void Promise.all([loadCatalog(), loadAccounts(), loadPatients()]);
+        onCatalogChanged();
+        return;
+      }
+
+      if (event.entity === "room" || event.entity === "bed") {
+        void loadCatalog();
+        onCatalogChanged();
+        return;
+      }
+
+      if (event.entity === "patient") {
+        void Promise.all([loadPatients(), loadCatalog()]);
+        onCatalogChanged();
+      }
+    },
+    [loadAccounts, loadCatalog, loadPatients, onCatalogChanged],
+  );
+
   useEffect(() => {
     const timeout = window.setTimeout(refreshAll, 0);
 
     return () => window.clearTimeout(timeout);
   }, [refreshAll]);
+
+  useEffect(() => {
+    setRealtimeContext({ page: "admin" });
+
+    return subscribeRealtime(handleRealtimeEvent);
+  }, [handleRealtimeEvent]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -281,14 +325,15 @@ export function AdminPanel({
     try {
       await action();
       setSuccess(okMessage);
+      return true;
     } catch (actionError) {
       setError(errorMessage(actionError));
+      return false;
     }
   }
 
-  async function handleCreateAccount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await runAdminAction(async () => {
+  async function handleCreateAccount() {
+    return await runAdminAction(async () => {
       const result = await createAccount({
         name: createForm.name,
         email: createForm.email,
@@ -303,9 +348,7 @@ export function AdminPanel({
     }, "Compte créé");
   }
 
-  async function handleUpdateAccount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function handleUpdateAccount() {
     if (!selectedAccountId) {
       return;
     }
@@ -507,7 +550,9 @@ export function AdminPanel({
     }
 
     const persistedRoomId = roomDraft.persistedId;
-    const existingRoomBeds = beds.filter((bed) => bed.roomId === persistedRoomId);
+    const existingRoomBeds = beds.filter(
+      (bed) => bed.roomId === persistedRoomId,
+    );
     const desiredPersistedBedIds = new Set(
       desiredBeds
         .map((bed) => bed.persistedId)
@@ -537,7 +582,9 @@ export function AdminPanel({
     );
 
     setRooms((current) =>
-      current.map((room) => (room.id === persistedRoomId ? optimisticRoom : room)),
+      current.map((room) =>
+        room.id === persistedRoomId ? optimisticRoom : room,
+      ),
     );
     setBeds((current) => [
       ...current.filter((bed) => bed.roomId !== persistedRoomId),
@@ -545,54 +592,53 @@ export function AdminPanel({
     ]);
     setRoomDraftOverrides((current) => omitRecordKey(current, roomDraft.id));
 
-    await runAdminAction(
-      async () => {
-        try {
-          const savedRoom = await updateRoom(persistedRoomId, {
-            label,
-            service: roomDraft.service,
-            sortOrder: positiveSortOrder(roomDraft.sortOrder),
-          });
+    await runAdminAction(async () => {
+      try {
+        const savedRoom = await updateRoom(persistedRoomId, {
+          label,
+          service: roomDraft.service,
+          sortOrder: positiveSortOrder(roomDraft.sortOrder),
+        });
 
-          const savedBeds = await Promise.all(
-            desiredBeds.map((bed) =>
-              bed.persistedId
-                ? updateBed(bed.persistedId, {
-                    label: bed.label,
-                    roomId: persistedRoomId,
-                    sortOrder: bed.sortOrder,
-                  })
-                : createBed({
-                    label: bed.label,
-                    roomId: persistedRoomId,
-                    sortOrder: bed.sortOrder,
-                  }),
-            ),
-          );
+        const savedBeds = await Promise.all(
+          desiredBeds.map((bed) =>
+            bed.persistedId
+              ? updateBed(bed.persistedId, {
+                  label: bed.label,
+                  roomId: persistedRoomId,
+                  sortOrder: bed.sortOrder,
+                })
+              : createBed({
+                  label: bed.label,
+                  roomId: persistedRoomId,
+                  sortOrder: bed.sortOrder,
+                }),
+          ),
+        );
 
-          for (const bed of removedBeds.reverse()) {
-            await deleteBed(bed.id);
-          }
-
-          setRooms((current) =>
-            current.map((room) => (room.id === persistedRoomId ? savedRoom : room)),
-          );
-          setBeds((current) => [
-            ...current.filter((bed) => bed.roomId !== persistedRoomId),
-            ...savedBeds,
-          ]);
-          onCatalogChanged();
-        } catch (saveError) {
-          setRooms(previousRooms);
-          setBeds(previousBeds);
-          setDraftRooms(previousDraftRooms);
-          setRoomDraftOverrides(previousRoomDraftOverrides);
-          setFocusedRoomId(previousFocusedRoomId);
-          throw saveError;
+        for (const bed of removedBeds.reverse()) {
+          await deleteBed(bed.id);
         }
-      },
-      "Chambre mise à jour",
-    );
+
+        setRooms((current) =>
+          current.map((room) =>
+            room.id === persistedRoomId ? savedRoom : room,
+          ),
+        );
+        setBeds((current) => [
+          ...current.filter((bed) => bed.roomId !== persistedRoomId),
+          ...savedBeds,
+        ]);
+        onCatalogChanged();
+      } catch (saveError) {
+        setRooms(previousRooms);
+        setBeds(previousBeds);
+        setDraftRooms(previousDraftRooms);
+        setRoomDraftOverrides(previousRoomDraftOverrides);
+        setFocusedRoomId(previousFocusedRoomId);
+        throw saveError;
+      }
+    }, "Chambre mise à jour");
   }
 
   async function handleDeleteRoomCard(roomDraft: EditableRoomCardModel) {
@@ -634,8 +680,12 @@ export function AdminPanel({
     const previousBeds = beds;
     const previousRoomDraftOverrides = roomDraftOverrides;
 
-    setRooms((current) => current.filter((room) => room.id !== persistedRoomId));
-    setBeds((current) => current.filter((bed) => bed.roomId !== persistedRoomId));
+    setRooms((current) =>
+      current.filter((room) => room.id !== persistedRoomId),
+    );
+    setBeds((current) =>
+      current.filter((bed) => bed.roomId !== persistedRoomId),
+    );
     setRoomDraftOverrides((current) => omitRecordKey(current, roomDraft.id));
     setRoomPendingDeletion(null);
 
@@ -656,36 +706,13 @@ export function AdminPanel({
     }, "Chambre supprimée");
   }
 
-  const adminActions = (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="flex h-9 items-center gap-2 rounded-lg border bg-background px-3 text-sm text-muted-foreground">
-        <input
-          type="checkbox"
-          className="size-4 rounded border-input"
-          checked={includeDisabled}
-          onChange={(event) => setIncludeDisabled(event.target.checked)}
-        />
-        Suspendus
-      </label>
-      <Button type="button" variant="outline" onClick={refreshAll}>
-        <RefreshCw
-          className={cn(
-            "size-4",
-            (loading || catalogLoading || patientLoading) && "animate-spin",
-          )}
-        />
-        Actualiser
-      </Button>
-    </div>
-  );
-
   if (view.type === "unknown") {
     return <Navigate to="/admin" replace />;
   }
 
   return (
-    <div className="space-y-5">
-      <AdminHeader actions={adminActions} view={view} />
+    <div className="space-y-5 min-h-full">
+      <AdminHeader view={view} />
 
       {error && <AlertMessage message={error} />}
       {success && <AlertMessage tone="success" message={success} />}
@@ -745,10 +772,11 @@ export function AdminPanel({
       {view.type === "personnel" && (
         <PersonnelPage
           accounts={accounts}
+          createAccountForm={createAccountForm}
           createForm={createForm}
+          editAccountForm={editAccountForm}
           editForm={editForm}
           filteredAccounts={filteredAccounts}
-          includeDisabled={includeDisabled}
           loading={loading}
           personnelRole={personnelRole}
           personnelSearch={personnelSearch}
@@ -757,7 +785,7 @@ export function AdminPanel({
           selectedAccountId={selectedAccountId}
           services={services}
           onAssignRole={() => void handleAssignRole()}
-          onCreateAccount={(event) => void handleCreateAccount(event)}
+          onCreateAccount={handleCreateAccount}
           onDisableAccount={() => void handleDisableAccount()}
           onResetPassword={() => void handleResetPassword()}
           onSelectAccount={setSelectedAccountId}
@@ -766,7 +794,7 @@ export function AdminPanel({
           onSetPersonnelRole={setPersonnelRole}
           onSetPersonnelSearch={setPersonnelSearch}
           onSetPersonnelService={setPersonnelService}
-          onUpdateAccount={(event) => void handleUpdateAccount(event)}
+          onUpdateAccount={handleUpdateAccount}
         />
       )}
 
@@ -790,6 +818,8 @@ export function AdminPanel({
         <ServiceDetailPage
           accounts={accounts}
           beds={beds}
+          createAccountForm={createAccountForm}
+          createForm={createForm}
           patients={patients}
           draftRooms={draftRooms}
           focusedRoomId={focusedRoomId}
@@ -797,12 +827,14 @@ export function AdminPanel({
           rooms={rooms}
           service={activeService}
           onBack={() => navigate("/admin/services")}
+          onCreateAccount={handleCreateAccount}
           onCreateRoom={(serviceName) => handleCreateRoomDraft(serviceName)}
           onDeleteService={(service) => void handleDeleteService(service)}
           onDeleteRoom={(room) => void handleDeleteRoomCard(room)}
           onDraftChange={handleRoomCardDraftChange}
           onRoomFocusHandled={() => setFocusedRoomId(null)}
           onSaveRoom={(room) => void handleSaveRoomCard(room)}
+          onSetCreateForm={setCreateForm}
           onUpdateService={(event, service, form) =>
             void handleUpdateService(event, service, form)
           }
@@ -812,29 +844,23 @@ export function AdminPanel({
   );
 }
 
-function AdminHeader({
-  actions,
-  view,
-}: {
-  actions: ReactNode;
-  view: AdminView;
-}) {
+function AdminHeader({ view }: { view: AdminView }) {
   const navigate = useNavigate();
   const title =
     view.type === "personnel"
       ? "Personnel"
       : view.type === "services" || view.type === "service-detail"
-          ? "Services"
-          : "Administration";
+        ? "Services"
+        : "Administration";
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 shadow md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         {view.type !== "home" && (
           <Button
             type="button"
             variant="outline"
-            size="icon-lg"
+            size="icon"
             onClick={() => navigate("/admin")}
             aria-label="Retour à l'administration"
           >
@@ -842,15 +868,14 @@ function AdminHeader({
           </Button>
         )}
         <div className="min-w-0">
-          <h2 className="truncate font-heading text-2xl font-medium">
+          <h1 className="truncate font-heading text-2xl font-medium">
             {title}
-          </h2>
+          </h1>
           <p className="text-sm text-muted-foreground">
             Gestion opérationnelle de l'hôpital
           </p>
         </div>
       </div>
-      {actions}
     </div>
   );
 }
@@ -914,16 +939,20 @@ function AdminLandingCard({
   return (
     <button
       type="button"
-      className="flex min-h-60 flex-col justify-between rounded-lg border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 text-left transition hover:border-primary/40 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       onClick={onClick}
     >
-      <span className="flex size-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Icon className="size-7" />
-      </span>
-      <span>
-        <span className="block font-heading text-2xl font-medium">{title}</span>
-        <span className="mt-1 block text-sm text-muted-foreground">
-          {detail}
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+          <Icon className="size-5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block font-heading text-lg font-medium">
+            {title}
+          </span>
+          <span className="block truncate text-sm text-muted-foreground">
+            {detail}
+          </span>
         </span>
       </span>
       <span className="flex flex-wrap gap-2">
@@ -938,7 +967,9 @@ function AdminLandingCard({
 }
 
 function PersonnelPage({
+  createAccountForm,
   createForm,
+  editAccountForm,
   editForm,
   filteredAccounts,
   loading,
@@ -961,32 +992,33 @@ function PersonnelPage({
   onUpdateAccount,
 }: {
   accounts: Account[];
+  createAccountForm: UseFormReturn<AccountFormState>;
   createForm: AccountFormState;
+  editAccountForm: UseFormReturn<AccountFormState>;
   editForm: AccountFormState;
   filteredAccounts: Account[];
-  includeDisabled: boolean;
   loading: boolean;
   personnelRole: string;
   personnelSearch: string;
   personnelService: string;
   selectedAccount: Account | undefined;
-  selectedAccountId: string | null;
+  selectedAccountId: number | null;
   services: Service[];
   onAssignRole: () => void;
-  onCreateAccount: (event: FormEvent<HTMLFormElement>) => void;
+  onCreateAccount: () => Promise<boolean>;
   onDisableAccount: () => void;
   onResetPassword: () => void;
-  onSelectAccount: (accountId: string) => void;
+  onSelectAccount: (accountId: number) => void;
   onSetCreateForm: (form: AccountFormState) => void;
   onSetEditForm: (form: AccountFormState) => void;
   onSetPersonnelRole: (role: string) => void;
   onSetPersonnelSearch: (search: string) => void;
   onSetPersonnelService: (service: string) => void;
-  onUpdateAccount: (event: FormEvent<HTMLFormElement>) => void;
+  onUpdateAccount: () => Promise<void>;
 }) {
   return (
     <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-      <div className="rounded-lg border bg-background p-4 shadow">
+      <div className="rounded-lg border bg-background p-4">
         <div className="grid gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <Users className="size-4 shrink-0 text-primary" />
@@ -1048,42 +1080,49 @@ function PersonnelPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAccounts.map((account) => (
-                <TableRow
-                  key={account.id}
-                  className={cn(
-                    "cursor-pointer",
-                    selectedAccountId === account.id && "bg-primary/5",
-                  )}
-                  onClick={() => onSelectAccount(account.id)}
-                >
-                  <TableCell className="font-medium">{account.name}</TableCell>
-                  <TableCell>{account.email}</TableCell>
-                  <TableCell>{ROLE_LABELS[account.role]}</TableCell>
-                  <TableCell>{account.service}</TableCell>
-                  <TableCell>
-                    <AccountStatusBadge status={account.status} />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredAccounts.length > 0 ? (
+                filteredAccounts.map((account) => (
+                  <TableRow
+                    key={account.id}
+                    className={cn(
+                      "cursor-pointer",
+                      selectedAccountId === account.id && "bg-primary/5",
+                    )}
+                    onClick={() => onSelectAccount(account.id)}
+                  >
+                    <TableCell className="font-medium">
+                      {account.name}
+                    </TableCell>
+                    <TableCell>{account.email}</TableCell>
+                    <TableCell>{ROLE_LABELS[account.role]}</TableCell>
+                    <TableCell>{account.service}</TableCell>
+                    <TableCell>
+                      <AccountStatusBadge status={account.status} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow colSpan={5}>
+                  {loading ? "Chargement du personnel" : "Aucun membre trouvé"}
+                </TableEmptyRow>
+              )}
             </TableBody>
           </Table>
         </div>
-        {filteredAccounts.length === 0 && (
-          <EmptyState
-            label={loading ? "Chargement du personnel" : "Aucun membre trouvé"}
-          />
-        )}
       </div>
 
       <div className="space-y-4">
         <form
-          className="grid gap-3 rounded-lg border bg-background p-4 shadow"
-          onSubmit={onCreateAccount}
+          className="grid gap-3 rounded-lg border bg-background p-4"
+          noValidate
+          onSubmit={createAccountForm.handleSubmit(onCreateAccount)}
         >
           <SectionTitle icon={UserPlus} title="Nouveau membre" />
           <AccountFields
+            control={createAccountForm.control}
+            errors={createAccountForm.formState.errors}
             form={createForm}
+            register={createAccountForm.register}
             services={services}
             onChange={onSetCreateForm}
             invite
@@ -1095,14 +1134,18 @@ function PersonnelPage({
         </form>
 
         <form
-          className="grid gap-3 rounded-lg border bg-background p-4 shadow"
-          onSubmit={onUpdateAccount}
+          className="grid gap-3 rounded-lg border bg-background p-4"
+          noValidate
+          onSubmit={editAccountForm.handleSubmit(onUpdateAccount)}
         >
           <SectionTitle icon={UserCog} title="Membre sélectionné" />
           {selectedAccount ? (
             <>
               <AccountFields
+                control={editAccountForm.control}
+                errors={editAccountForm.formState.errors}
                 form={editForm}
+                register={editAccountForm.register}
                 services={services}
                 onChange={onSetEditForm}
               />
@@ -1181,7 +1224,7 @@ function ServicesPage({
         {services.length === 0 && <EmptyState label="Aucun service" />}
       </div>
       <form
-        className="grid content-start gap-3 rounded-lg border bg-background p-4 shadow"
+        className="grid content-start gap-3 rounded-lg border bg-background p-4"
         onSubmit={onCreateService}
       >
         <SectionTitle icon={Plus} title="Nouveau service" />
@@ -1206,6 +1249,8 @@ function ServicesPage({
 function ServiceDetailPage({
   accounts,
   beds,
+  createAccountForm,
+  createForm,
   patients,
   draftRooms,
   focusedRoomId,
@@ -1213,16 +1258,20 @@ function ServiceDetailPage({
   rooms,
   service,
   onBack,
+  onCreateAccount,
   onCreateRoom,
   onDeleteRoom,
   onDeleteService,
   onDraftChange,
   onRoomFocusHandled,
   onSaveRoom,
+  onSetCreateForm,
   onUpdateService,
 }: {
   accounts: Account[];
   beds: Bed[];
+  createAccountForm: UseFormReturn<AccountFormState>;
+  createForm: AccountFormState;
   patients: Patient[];
   draftRooms: EditableRoomCardModel[];
   focusedRoomId: string | null;
@@ -1230,12 +1279,14 @@ function ServiceDetailPage({
   rooms: Room[];
   service: Service | null | undefined;
   onBack: () => void;
+  onCreateAccount: () => Promise<boolean>;
   onCreateRoom: (serviceName: string) => void;
   onDeleteRoom: (room: EditableRoomCardModel) => void;
   onDeleteService: (service: Service) => void;
   onDraftChange: (room: EditableRoomCardModel) => void;
   onRoomFocusHandled: () => void;
   onSaveRoom: (room: EditableRoomCardModel) => void;
+  onSetCreateForm: (form: AccountFormState) => void;
   onUpdateService: (
     event: FormEvent<HTMLFormElement>,
     service: Service,
@@ -1251,6 +1302,8 @@ function ServiceDetailPage({
       key={`${service.id}:${service.name}`}
       accounts={accounts}
       beds={beds}
+      createAccountForm={createAccountForm}
+      createForm={createForm}
       patients={patients}
       draftRooms={draftRooms}
       focusedRoomId={focusedRoomId}
@@ -1258,12 +1311,14 @@ function ServiceDetailPage({
       rooms={rooms}
       service={service}
       onBack={onBack}
+      onCreateAccount={onCreateAccount}
       onCreateRoom={onCreateRoom}
       onDeleteRoom={onDeleteRoom}
       onDeleteService={onDeleteService}
       onDraftChange={onDraftChange}
       onRoomFocusHandled={onRoomFocusHandled}
       onSaveRoom={onSaveRoom}
+      onSetCreateForm={onSetCreateForm}
       onUpdateService={onUpdateService}
     />
   );
@@ -1272,6 +1327,8 @@ function ServiceDetailPage({
 function ServiceDetailContent({
   accounts,
   beds,
+  createAccountForm,
+  createForm,
   patients,
   draftRooms,
   focusedRoomId,
@@ -1279,16 +1336,20 @@ function ServiceDetailContent({
   rooms,
   service,
   onBack,
+  onCreateAccount,
   onCreateRoom,
   onDeleteRoom,
   onDeleteService,
   onDraftChange,
   onRoomFocusHandled,
   onSaveRoom,
+  onSetCreateForm,
   onUpdateService,
 }: {
   accounts: Account[];
   beds: Bed[];
+  createAccountForm: UseFormReturn<AccountFormState>;
+  createForm: AccountFormState;
   patients: Patient[];
   draftRooms: EditableRoomCardModel[];
   focusedRoomId: string | null;
@@ -1296,12 +1357,14 @@ function ServiceDetailContent({
   rooms: Room[];
   service: Service;
   onBack: () => void;
+  onCreateAccount: () => Promise<boolean>;
   onCreateRoom: (serviceName: string) => void;
   onDeleteRoom: (room: EditableRoomCardModel) => void;
   onDeleteService: (service: Service) => void;
   onDraftChange: (room: EditableRoomCardModel) => void;
   onRoomFocusHandled: () => void;
   onSaveRoom: (room: EditableRoomCardModel) => void;
+  onSetCreateForm: (form: AccountFormState) => void;
   onUpdateService: (
     event: FormEvent<HTMLFormElement>,
     service: Service,
@@ -1311,6 +1374,7 @@ function ServiceDetailContent({
   const [form, setForm] = useState<ServiceFormState>(() =>
     serviceToForm(service),
   );
+  const [addingPersonnel, setAddingPersonnel] = useState(false);
   const serviceRooms = rooms.filter((room) => room.service === service.name);
   const serviceDraftRooms = draftRooms.filter(
     (room) => room.service === service.name,
@@ -1320,11 +1384,23 @@ function ServiceDetailContent({
   const serviceAccounts = accounts.filter(
     (account) => account.service === service.name,
   );
+  const openAddPersonnelDialog = () => {
+    createAccountForm.clearErrors();
+    onSetCreateForm(emptyAccountForm(service.name));
+    setAddingPersonnel(true);
+  };
+  const submitServiceAccount = createAccountForm.handleSubmit(() =>
+    onCreateAccount().then((created) => {
+      if (created) {
+        setAddingPersonnel(false);
+      }
+    }),
+  );
 
   return (
     <div className="space-y-4">
       <form
-        className="grid gap-4 rounded-lg border bg-background p-4 shadow"
+        className="grid gap-4 rounded-lg border bg-background p-4"
         onSubmit={(event) => onUpdateService(event, service, form)}
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1377,7 +1453,6 @@ function ServiceDetailContent({
         focusedRoomId={focusedRoomId}
         rooms={serviceRooms}
         roomDraftOverrides={roomDraftOverrides}
-        serviceName={service.name}
         onCreateRoom={() => onCreateRoom(service.name)}
         onDeleteRoom={onDeleteRoom}
         onDraftChange={onDraftChange}
@@ -1385,8 +1460,21 @@ function ServiceDetailContent({
         onSaveRoom={onSaveRoom}
       />
 
-      <div className="rounded-lg border bg-background p-4 shadow">
-        <SectionTitle icon={Users} title="Personnel du service" />
+      <div className="rounded-lg border bg-background p-4">
+        <SectionTitle
+          icon={Users}
+          title="Personnel du service"
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openAddPersonnelDialog}
+            >
+              <UserPlus className="size-4" />
+              Ajouter
+            </Button>
+          }
+        />
         <div className="mt-4 overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>
@@ -1398,23 +1486,67 @@ function ServiceDetailContent({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {serviceAccounts.map((account) => (
-                <TableRow key={account.id}>
-                  <TableCell className="font-medium">{account.name}</TableCell>
-                  <TableCell>{account.email}</TableCell>
-                  <TableCell>{ROLE_LABELS[account.role]}</TableCell>
-                  <TableCell>
-                    <AccountStatusBadge status={account.status} />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {serviceAccounts.length > 0 ? (
+                serviceAccounts.map((account) => (
+                  <TableRow key={account.id}>
+                    <TableCell className="font-medium">
+                      {account.name}
+                    </TableCell>
+                    <TableCell>{account.email}</TableCell>
+                    <TableCell>{ROLE_LABELS[account.role]}</TableCell>
+                    <TableCell>
+                      <AccountStatusBadge status={account.status} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyRow colSpan={4}>
+                  Aucun personnel dans ce service
+                </TableEmptyRow>
+              )}
             </TableBody>
           </Table>
         </div>
-        {serviceAccounts.length === 0 && (
-          <EmptyState label="Aucun personnel dans ce service" />
-        )}
       </div>
+      <Dialog open={addingPersonnel} onOpenChange={setAddingPersonnel}>
+        <DialogContent>
+          <form
+            className="grid gap-4"
+            noValidate
+            onSubmit={submitServiceAccount}
+          >
+            <DialogHeader>
+              <DialogTitle>Ajouter du personnel</DialogTitle>
+              <DialogDescription>
+                Le nouveau membre sera rattaché au service {service.name}.
+              </DialogDescription>
+            </DialogHeader>
+            <AccountFields
+              control={createAccountForm.control}
+              errors={createAccountForm.formState.errors}
+              form={createForm}
+              register={createAccountForm.register}
+              services={[service]}
+              onChange={onSetCreateForm}
+              invite
+              serviceLocked
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddingPersonnel(false)}
+              >
+                Annuler
+              </Button>
+              <Button type="submit">
+                <UserPlus className="size-4" />
+                Créer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1440,7 +1572,7 @@ function ServiceCard({
   return (
     <button
       type="button"
-      className="grid min-h-52 gap-4 rounded-lg border bg-background p-5 text-left shadow transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="grid min-h-52 gap-4 rounded-lg border bg-background p-5 text-left transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       onClick={onClick}
     >
       <span className="flex items-start justify-between gap-3">
@@ -1482,7 +1614,6 @@ function AdminRoomGrid({
   focusedRoomId = null,
   roomDraftOverrides = {},
   rooms,
-  serviceName,
   onCreateRoom,
   onDeleteRoom,
   onDraftChange,
@@ -1495,7 +1626,6 @@ function AdminRoomGrid({
   focusedRoomId?: string | null;
   roomDraftOverrides?: Record<string, EditableRoomCardModel>;
   rooms: Room[];
-  serviceName: string;
   onCreateRoom?: () => void;
   onDeleteRoom: (room: EditableRoomCardModel) => void;
   onDraftChange: (room: EditableRoomCardModel) => void;
@@ -1511,8 +1641,7 @@ function AdminRoomGrid({
     [groupedRooms],
   );
   const mergedPersistedCards = useMemo(
-    () =>
-      persistedCards.map((room) => roomDraftOverrides[room.id] ?? room),
+    () => persistedCards.map((room) => roomDraftOverrides[room.id] ?? room),
     [persistedCards, roomDraftOverrides],
   );
   const gridItems = useMemo<Array<EditableRoomCardModel | null>>(
@@ -1565,22 +1694,16 @@ function AdminRoomGrid({
   );
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <BedIcon className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="font-heading text-xl font-medium">
-              Chambres{serviceName ? ` du service ${serviceName}` : ""}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {occupiedCount} lit{occupiedCount > 1 ? "s" : ""} occupé
-              {occupiedCount > 1 ? "s" : ""} sur {beds.length}.
-            </p>
-          </div>
-        </div>
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
+        <h2 className="flex items-center gap-2 font-heading text-base font-medium">
+          <BedIcon className="size-4 text-muted-foreground" />
+          Chambres
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          {occupiedCount} / {beds.length} lit{beds.length > 1 ? "s" : ""} occupé
+          {occupiedCount > 1 ? "s" : ""}
+        </p>
       </div>
 
       {gridItems.length > 0 ? (
@@ -1711,7 +1834,7 @@ function AdminRoomCard({
     <motion.div
       layout
       layoutId={`room-card-${room.id}`}
-      className="flex flex-col rounded-lg border bg-background p-4 shadow"
+      className="flex flex-col rounded-lg border bg-background p-4"
     >
       <div className="flex items-start justify-between gap-3">
         <form
@@ -1723,7 +1846,7 @@ function AdminRoomCard({
         >
           <Input
             ref={roomInputRef}
-            className="h-8 border-transparent px-0 font-heading text-lg font-medium shadow-none hover:border-input focus-visible:px-3"
+            className="-ml-2.5 h-8 cursor-text border-transparent font-heading text-lg font-medium shadow-none"
             value={room.label}
             onBlur={resetEmptyRoomLabel}
             onChange={(event) => updateRoomLabel(event.target.value)}
@@ -1795,7 +1918,9 @@ function EditableBedRow({
   const occupiedStyle =
     bed.occupiedPatientSex === "female"
       ? "border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-400/40 dark:bg-pink-950/30 dark:text-pink-200"
-      : "border-primary/30 bg-primary/10 text-primary";
+      : bed.occupiedPatientSex === "male"
+        ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/40 dark:bg-blue-950/30 dark:text-blue-200"
+        : "border-primary/30 bg-primary/10 text-primary";
 
   return (
     <Reorder.Item
@@ -1820,7 +1945,7 @@ function EditableBedRow({
       </button>
       <div className="min-w-0 flex-1">
         <Input
-          className="h-8 border-transparent bg-transparent px-0 text-sm font-medium shadow-none hover:border-input focus-visible:px-3"
+          className="-ml-2.5 h-8 cursor-text border-transparent bg-transparent text-sm font-medium shadow-none"
           value={bed.label}
           onBlur={() => {
             if (!bed.label.trim()) {
@@ -1883,7 +2008,7 @@ function NewRoomPlaceholder({
   return (
     <button
       type="button"
-      className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-input bg-background/60 p-4 text-center text-muted-foreground shadow-sm transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-input disabled:hover:bg-background/60 disabled:hover:text-muted-foreground"
+      className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-input bg-background/60 p-4 text-center text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-input disabled:hover:bg-background/60 disabled:hover:text-muted-foreground"
       disabled={disabled}
       onClick={onCreateRoom}
       aria-label="Créer une nouvelle chambre"
@@ -1899,59 +2024,96 @@ function NewRoomPlaceholder({
 }
 
 function AccountFields({
+  control,
+  errors,
   form,
+  register,
   services,
   onChange,
   invite = false,
+  serviceLocked = false,
 }: {
+  control: Control<AccountFormState>;
+  errors: FieldErrors<AccountFormState>;
   form: AccountFormState;
+  register: UseFormRegister<AccountFormState>;
   services: Service[];
   onChange: (form: AccountFormState) => void;
   invite?: boolean;
+  serviceLocked?: boolean;
 }) {
+  const nameRegistration = register("name", {
+    validate: validateRequired,
+    onChange: (event) => onChange({ ...form, name: event.target.value }),
+  });
+  const emailRegistration = register("email", {
+    validate: validateRequiredEmail,
+    onChange: (event) => onChange({ ...form, email: event.target.value }),
+  });
+
   return (
     <>
-      <Field label="Nom" required>
+      <Field label="Nom" required error={errors.name?.message}>
         <Input
-          required
+          {...nameRegistration}
+          aria-invalid={!!errors.name}
           value={form.name}
-          onChange={(event) => onChange({ ...form, name: event.target.value })}
         />
       </Field>
-      <Field label="Courriel" required>
+      <Field label="Courriel" required error={errors.email?.message}>
         <Input
-          required
-          type="email"
+          {...emailRegistration}
+          type="text"
+          inputMode="email"
+          autoComplete="email"
+          aria-invalid={!!errors.email}
           value={form.email}
-          onChange={(event) => onChange({ ...form, email: event.target.value })}
         />
       </Field>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Field label="Poste" required>
-          <Select
-            value={form.role}
-            onValueChange={(role) =>
-              onChange({ ...form, role: role as UserRole })
-            }
-          >
-            <SelectTrigger className="max-w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
-                <SelectItem key={role} value={role}>
-                  {ROLE_LABELS[role]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Field label="Poste" required error={errors.role?.message}>
+          <Controller
+            control={control}
+            name="role"
+            rules={{ validate: validateRequired }}
+            render={({ field }) => (
+              <Select
+                value={field.value}
+                onValueChange={(role) => {
+                  field.onChange(role);
+                  onChange({ ...form, role: role as UserRole });
+                }}
+              >
+                <SelectTrigger className="max-w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ROLE_LABELS) as UserRole[]).map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {ROLE_LABELS[role]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
         </Field>
-        <Field label="Service" required>
-          <ServiceSelect
-            services={services}
-            required
-            value={form.service}
-            onChange={(service) => onChange({ ...form, service })}
+        <Field label="Service" required error={errors.service?.message}>
+          <Controller
+            control={control}
+            name="service"
+            rules={{ validate: validateRequired }}
+            render={({ field }) => (
+              <ServiceSelect
+                services={services}
+                disabled={serviceLocked}
+                value={field.value ?? ""}
+                onChange={(service) => {
+                  field.onChange(service);
+                  onChange({ ...form, service });
+                }}
+              />
+            )}
           />
         </Field>
       </div>

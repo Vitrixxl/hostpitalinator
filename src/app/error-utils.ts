@@ -57,7 +57,7 @@ const ENGLISH_ERROR_MESSAGES: Record<string, string> = {
   "Account is disabled": "Ce compte est suspendu",
   "Admin role required": "Rôle administrateur requis",
   "Authentication required": "Authentification requise",
-  "Failed to fetch": "Serveur Hospitalinator indisponible",
+  "Failed to fetch": "Serveur du CH de Versailles indisponible",
   "Internal server error": "Erreur interne du serveur",
   "Invalid credentials": "Identifiants invalides",
   "Resource not found": "Ressource introuvable",

@@ -5,10 +5,12 @@ import { Label } from "@/components/ui/label"
 export function Field({
   label,
   required = false,
+  error,
   children,
 }: {
   label: string
   required?: boolean
+  error?: string
   children: ReactNode
 }) {
   return (
@@ -25,6 +27,11 @@ export function Field({
         )}
       </span>
       {children}
+      {error && (
+        <span className="text-xs font-normal text-destructive" role="alert">
+          {error}
+        </span>
+      )}
     </Label>
   )
 }

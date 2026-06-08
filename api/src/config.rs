@@ -11,6 +11,7 @@ pub struct ApiConfig {
 }
 
 const DEFAULT_WEB_ORIGINS: &[&str] = &[
+    "http://127.0.0.1:5188",
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "tauri://localhost",

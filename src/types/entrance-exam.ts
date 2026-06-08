@@ -1,4 +1,11 @@
-export type AntecedentCategory = "pathology" | "medical_act";
+import type { PatientId } from "@/types/patient";
+
+export type AntecedentCategory = "pathology" | "medical_history" | "surgery";
+
+export type PatientAntecedentCategory =
+  | AntecedentCategory
+  | "medical_act"
+  | "heavy_treatment";
 
 export type ClinicalReferenceKind = "pathology" | "medical_act";
 
@@ -14,8 +21,8 @@ export type ClinicalReference = {
 
 export type PatientAntecedent = {
   id: string;
-  patientId: string;
-  category: AntecedentCategory;
+  patientId: PatientId;
+  category: PatientAntecedentCategory;
   source?: string | null;
   code?: string | null;
   label: string;
@@ -26,12 +33,16 @@ export type PatientAntecedent = {
 
 export type EntranceExamRecord = {
   id: string;
-  patientId: string;
+  patientId: PatientId;
   visitId: string;
   isDraft: boolean;
   service: string;
+  admissionReason?: string | null;
   lifestyle?: string | null;
+  entranceTreatment?: string | null;
   diseaseHistory?: string | null;
+  clinicalExam?: string | null;
+  allergies?: string | null;
   synthesis?: string | null;
   createdAt: string;
   updatedAt: string;

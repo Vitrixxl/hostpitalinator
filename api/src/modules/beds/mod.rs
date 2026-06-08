@@ -11,6 +11,7 @@ use crate::{
     error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
     modules::{
         auth::{require_admin, CurrentAccount},
+        patients::PatientId,
         rooms::{self, Room},
         services,
     },
@@ -28,7 +29,7 @@ pub struct Bed {
     room: String,
     service: String,
     sort_order: i64,
-    occupied_patient_id: Option<String>,
+    occupied_patient_id: Option<PatientId>,
     occupied_patient_name: Option<String>,
     occupied_patient_sex: Option<String>,
 }
@@ -375,7 +376,7 @@ async fn ensure_occupied_bed_can_move(
     bed_id: &str,
     service: &str,
 ) -> ApiResult<()> {
-    let patient: Option<(String,)> = sqlx::query_as(
+    let patient: Option<(PatientId,)> = sqlx::query_as(
         r#"
         SELECT id
         FROM patients

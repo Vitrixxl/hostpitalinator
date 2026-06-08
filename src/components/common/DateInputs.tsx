@@ -27,12 +27,14 @@ import {
 import { cn } from "@/lib/utils"
 
 export function DateTextInput({
+  "aria-invalid": ariaInvalid,
   className,
   disabled,
   required,
   value,
   onValueChange,
 }: {
+  "aria-invalid"?: boolean
   className?: string
   disabled?: boolean
   required?: boolean
@@ -111,6 +113,7 @@ export function DateTextInput({
           inputMode="numeric"
           placeholder="jj-mm-aaaa"
           title={DATE_TEXT_INPUT_TITLE}
+          aria-invalid={ariaInvalid}
           value={displayValue}
           onBlur={handleBlur}
           onChange={handleChange}

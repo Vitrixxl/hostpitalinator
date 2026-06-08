@@ -1,3 +1,5 @@
+import type { PatientId } from "@/types/patient"
+
 export type MedicalDocumentCategory =
   | "report"
   | "biology"
@@ -8,9 +10,10 @@ export type MedicalDocumentCategory =
 
 export type MedicalDocument = {
   id: string
-  patientId: string
+  patientId: PatientId
   title: string
   category: MedicalDocumentCategory
+  note?: string | null
   createdAt: string
   storagePath?: string | null
   mimeType?: string | null

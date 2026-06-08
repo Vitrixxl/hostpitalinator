@@ -5,13 +5,19 @@ import type {
   ClinicalReferenceKind,
   EntranceExam,
   EntranceExamRecord,
+  PatientIdentifier,
 } from "@/types"
 
 export type SaveEntranceExamInput = {
+  admissionReason?: string | null
   lifestyle?: string | null
+  entranceTreatment?: string | null
   diseaseHistory?: string | null
+  clinicalExam?: string | null
+  allergies?: string | null
   synthesis?: string | null
   antecedents: Array<{
+    id?: string
     category: AntecedentCategory
     source?: string | null
     code?: string | null
@@ -20,12 +26,12 @@ export type SaveEntranceExamInput = {
   }>
 }
 
-export function getEntranceExam(patientId: string) {
+export function getEntranceExam(patientId: PatientIdentifier) {
   return callApi<EntranceExam>(`/patients/${patientId}/entrance-exam`)
 }
 
 export function listEntranceExams(
-  patientId: string,
+  patientId: PatientIdentifier,
   options: { limit?: number; offset?: number } = {}
 ) {
   const params = new URLSearchParams({
@@ -39,7 +45,7 @@ export function listEntranceExams(
 }
 
 export function saveEntranceExam(
-  patientId: string,
+  patientId: PatientIdentifier,
   input: SaveEntranceExamInput
 ) {
   return callApi<EntranceExam>(`/patients/${patientId}/entrance-exam`, {

@@ -6,6 +6,7 @@ import {
   FlaskConical,
   HeartPulse,
   Stethoscope,
+  UserRoundCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -55,6 +56,7 @@ export const PATIENT_SEX_LABELS: Record<PatientSex, string> = {
 export const PATIENT_SEXES = Object.keys(PATIENT_SEX_LABELS) as PatientSex[];
 
 export const LAB_STATUS_LABELS: Record<LabStatus, string> = {
+  "en attente": "En attente",
   normal: "Normal",
   alerte: "Alerte",
   critique: "Critique",
@@ -66,8 +68,9 @@ export const PATIENT_TABS: Array<{
   label: string;
   icon: LucideIcon;
 }> = [
-  { value: "summary", label: "Synthèse", icon: Stethoscope },
+  { value: "summary", label: "Administratif", icon: Stethoscope },
   { value: "entrance", label: "Examen d'entrée", icon: ClipboardPenLine },
+  { value: "doctors", label: "Médecins", icon: UserRoundCheck },
   { value: "vitals", label: "Constantes", icon: HeartPulse },
   { value: "prescriptions", label: "Prescriptions", icon: ClipboardList },
   { value: "labs", label: "Biologie", icon: FlaskConical },

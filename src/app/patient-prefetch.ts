@@ -1,5 +1,4 @@
 import {
-  getLatestVitalRecord,
   getEntranceExam,
   getPatient,
   listEvolutionNotes,
@@ -15,6 +14,7 @@ import type {
   MedicalDocument,
   MedicalDocumentCategory,
   Patient,
+  PatientIdentifier,
   Prescription,
   VitalRecord,
 } from "@/types"
@@ -44,19 +44,19 @@ type PatientWorkspaceSnapshotOptions = {
 
 const patientWorkspaceCache = new Map<string, PatientWorkspaceCacheEntry>()
 
-export function prefetchPatientWorkspace(patientId: string) {
+export function prefetchPatientWorkspace(patientId: PatientIdentifier) {
   void getPatientWorkspaceSnapshot(patientId).catch(() => undefined)
 }
 
 export function peekPatientWorkspaceSnapshot(
-  patientId: string,
+  patientId: PatientIdentifier,
   documentFilter: PatientWorkspaceDocumentFilter = "all"
 ) {
   return patientWorkspaceCache.get(cacheKey(patientId, documentFilter))?.data
 }
 
 export async function getPatientWorkspaceSnapshot(
-  patientId: string,
+  patientId: PatientIdentifier,
   options: PatientWorkspaceSnapshotOptions = {}
 ) {
   const documentFilter = options.documentFilter ?? "all"
@@ -96,7 +96,7 @@ export async function getPatientWorkspaceSnapshot(
   }
 }
 
-export function invalidatePatientWorkspaceSnapshot(patientId: string) {
+export function invalidatePatientWorkspaceSnapshot(patientId: PatientIdentifier) {
   for (const key of patientWorkspaceCache.keys()) {
     if (key.startsWith(`${patientId}:`)) {
       patientWorkspaceCache.delete(key)
@@ -105,12 +105,11 @@ export function invalidatePatientWorkspaceSnapshot(patientId: string) {
 }
 
 async function fetchPatientWorkspaceSnapshot(
-  patientId: string,
+  patientId: PatientIdentifier,
   documentFilter: PatientWorkspaceDocumentFilter
 ): Promise<PatientWorkspaceSnapshot> {
   const [
     patient,
-    latestVital,
     vitals,
     prescriptions,
     labs,
@@ -119,7 +118,6 @@ async function fetchPatientWorkspaceSnapshot(
     entranceExam,
   ] = await Promise.all([
     getPatient(patientId),
-    getLatestVitalRecord(patientId),
     listVitalRecords(patientId),
     listPrescriptions(patientId),
     listLabResults(patientId),
@@ -133,7 +131,7 @@ async function fetchPatientWorkspaceSnapshot(
 
   return {
     patient,
-    latestVital,
+    latestVital: vitals[0] ?? null,
     vitals,
     prescriptions,
     labs,
@@ -144,7 +142,7 @@ async function fetchPatientWorkspaceSnapshot(
 }
 
 function cacheKey(
-  patientId: string,
+  patientId: PatientIdentifier,
   documentFilter: PatientWorkspaceDocumentFilter
 ) {
   return `${patientId}:${documentFilter}`

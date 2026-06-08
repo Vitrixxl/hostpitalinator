@@ -4,14 +4,22 @@ import type { ChangeEvent, KeyboardEvent } from "react"
 import { searchAddressSuggestions, type AddressSuggestion } from "@/api"
 import { ADDRESS_QUERY_MIN_LENGTH } from "@/app/constants"
 import { Input } from "@/components/ui/input"
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 export function AddressAutocomplete({
+  "aria-invalid": ariaInvalid,
   id,
   required,
   value,
   onChange,
 }: {
+  "aria-invalid"?: boolean
   id: string
   required?: boolean
   value: string
@@ -124,36 +132,43 @@ export function AddressAutocomplete({
   }
 
   return (
-    <div className="relative">
-      <Input
-        id={id}
-        required={required}
-        role="combobox"
-        aria-autocomplete="list"
-        aria-controls={suggestionListId}
-        aria-expanded={open}
-        aria-activedescendant={
-          activeSuggestion ? `${suggestionListId}-${activeIndex}` : undefined
-        }
-        value={value}
-        onBlur={() => {
-          inputFocusedRef.current = false
-          setOpen(false)
-          setActiveIndex(-1)
-        }}
-        onChange={handleChange}
-        onFocus={() => {
-          inputFocusedRef.current = true
-          setOpen(suggestions.length > 0 || status === "error")
-        }}
-        onKeyDown={handleKeyDown}
-      />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <Input
+          id={id}
+          required={required}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls={suggestionListId}
+          aria-expanded={open}
+          aria-invalid={ariaInvalid}
+          aria-activedescendant={
+            activeSuggestion ? `${suggestionListId}-${activeIndex}` : undefined
+          }
+          value={value}
+          onBlur={() => {
+            inputFocusedRef.current = false
+            setOpen(false)
+            setActiveIndex(-1)
+          }}
+          onChange={handleChange}
+          onFocus={() => {
+            inputFocusedRef.current = true
+            setOpen(suggestions.length > 0 || status === "error")
+          }}
+          onKeyDown={handleKeyDown}
+        />
+      </PopoverAnchor>
 
-      {open && (
-        <div
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popper-anchor-width)] max-w-[calc(100vw-2rem)] p-1"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <ScrollArea
           id={suggestionListId}
           role="listbox"
-          className="absolute inset-x-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          className="max-h-64 [&_[data-slot=scroll-area-viewport]]:overscroll-contain"
         >
           {suggestions.map((suggestion, index) => (
             <button
@@ -195,9 +210,9 @@ export function AddressAutocomplete({
               Suggestions indisponibles
             </div>
           )}
-        </div>
-      )}
-    </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
   )
 }
 

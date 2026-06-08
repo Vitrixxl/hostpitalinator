@@ -16,7 +16,6 @@ use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::FromRow;
-use uuid::Uuid;
 
 use crate::{
     error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
@@ -117,7 +116,7 @@ const WORDS: &[&str] = &[
 #[derive(Clone, Debug, FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurrentAccount {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     pub email: String,
     pub role: String,
@@ -132,7 +131,7 @@ pub struct CurrentSession {
 
 #[derive(Debug, FromRow)]
 struct AccountCredentials {
-    id: String,
+    id: i64,
     name: String,
     email: String,
     role: String,
@@ -224,7 +223,12 @@ pub async fn authenticate_token(
     .ok_or_else(|| ApiError::unauthorized("Authentification requise"))?;
 
     sqlx::query(
-        "UPDATE sessions SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE token_hash = ?",
+        r#"
+        UPDATE sessions
+        SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE token_hash = ?
+          AND strftime('%s', 'now') - strftime('%s', last_seen_at) >= 60
+        "#,
     )
     .bind(&token_hash)
     .execute(&state.pool)
@@ -297,7 +301,7 @@ pub fn generate_token() -> String {
 
 fn to_current_account(credentials: &AccountCredentials) -> CurrentAccount {
     CurrentAccount {
-        id: credentials.id.clone(),
+        id: credentials.id,
         name: credentials.name.clone(),
         email: credentials.email.clone(),
         role: credentials.role.clone(),
@@ -386,16 +390,14 @@ async fn bootstrap_admin(
     let service = services::ensure_service_created(&state, &payload.service).await?;
     let generated_password = generate_password();
     let password_hash = hash_password(&generated_password)?;
-    let id = Uuid::new_v4().to_string();
 
     let credentials = sqlx::query_as::<_, AccountCredentials>(
         r#"
-        INSERT INTO accounts (id, name, email, role, service, status, password_hash)
-        VALUES (?, ?, ?, 'admin', ?, 'active', ?)
+        INSERT INTO accounts (name, email, role, service, status, password_hash)
+        VALUES (?, ?, 'admin', ?, 'active', ?)
         RETURNING id, name, email, role, service, status, password_hash
         "#,
     )
-    .bind(id)
     .bind(payload.name.trim())
     .bind(payload.email.trim())
     .bind(service)

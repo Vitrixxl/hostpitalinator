@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useForm } from "react-hook-form";
 import { Plus, UserPlus } from "lucide-react";
 
 import type { PatientFormState } from "@/app/types";
@@ -26,16 +26,22 @@ export function PatientCreationPage({
   services: Service[];
   onCancel: () => void;
   onChange: (form: PatientFormState) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: () => void | Promise<void>;
 }) {
+  const patientForm = useForm<PatientFormState>({
+    values: form,
+    mode: "onSubmit",
+    reValidateMode: "onChange",
+  });
+
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      <div className="flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-heading text-2xl font-medium">
+    <div className="mx-auto max-w-7xl space-y-5 min-h-full">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-heading text-2xl font-medium">
             Création d'un nouveau patient
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          </h1>
+          <p className="text-sm text-muted-foreground">
             Identité, coordonnées et affectation initiale.
           </p>
         </div>
@@ -46,13 +52,19 @@ export function PatientCreationPage({
 
       {error && <AlertMessage message={error} />}
 
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <section className="rounded-3xl border bg-background p-4 shadow">
+      <form
+        className="space-y-4"
+        noValidate
+        onSubmit={patientForm.handleSubmit(onSubmit)}
+      >
+        <section className="rounded-lg border border-border bg-card p-3">
           <SectionTitle icon={UserPlus} title="Données administratives" />
           <PatientFormFields
             account={account}
             administrativeRequired
             beds={beds}
+            control={patientForm.control}
+            errors={patientForm.formState.errors}
             form={form}
             services={services}
             onChange={onChange}

@@ -63,7 +63,7 @@ enum RealtimeClientMessage {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 enum RealtimeServerMessage {
-    Connected { account_id: String },
+    Connected { account_id: i64 },
     ContextUpdated { context: RealtimeClientContext },
     Event { event: RealtimeEvent },
     Pong,
@@ -121,7 +121,7 @@ async fn connect_realtime(
         .into_response())
 }
 
-async fn handle_socket(state: AppState, account_id: String, mut socket: WebSocket) {
+async fn handle_socket(state: AppState, account_id: i64, mut socket: WebSocket) {
     let mut receiver = state.realtime.subscribe();
     let mut context = RealtimeClientContext::default();
 

@@ -4,9 +4,8 @@ use axum::{
     routing::{get, patch},
     Extension, Json, Router,
 };
-use serde::{Deserialize, Deserializer, Serialize};
-use sqlx::FromRow;
-use uuid::Uuid;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sqlx::{FromRow, QueryBuilder, Sqlite};
 
 use crate::{
     error::{ApiError, ApiJson, ApiResult},
@@ -20,11 +19,26 @@ use crate::{
 };
 
 const PATIENT_SEXES: &[&str] = &["female", "male"];
+const MAX_PATIENT_LIST_LIMIT: i64 = 200;
+pub type PatientId = i64;
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactPerson {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub relationship: String,
+    #[serde(default)]
+    pub phone_number: String,
+    #[serde(default)]
+    pub email: String,
+}
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Patient {
-    pub id: String,
+    pub id: PatientId,
     pub first_name: String,
     pub last_name: String,
     pub birth_date: String,
@@ -33,7 +47,10 @@ pub struct Patient {
     pub apartment_number: Option<String>,
     pub phone_number: Option<String>,
     pub email: Option<String>,
+    pub admission_reason: Option<String>,
     pub administrative_info: Option<String>,
+    #[serde(serialize_with = "serialize_contact_persons")]
+    pub contact_persons: String,
     pub current_service: String,
     pub current_visit_id: Option<String>,
     pub current_visit_started_at: Option<String>,
@@ -56,7 +73,9 @@ pub struct CreatePatientRequest {
     apartment_number: Option<String>,
     phone_number: Option<String>,
     email: Option<String>,
+    admission_reason: Option<String>,
     administrative_info: Option<String>,
+    contact_persons: Option<Vec<ContactPerson>>,
     current_service: Option<String>,
     bed_id: Option<String>,
     weight: Option<f64>,
@@ -80,7 +99,14 @@ pub struct UpdatePatientRequest {
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     email: NullableStringField,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
+    admission_reason: NullableStringField,
+    #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     administrative_info: NullableStringField,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_nullable_contact_persons_field"
+    )]
+    contact_persons: NullableContactPersonsField,
     current_service: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nullable_string_field")]
     bed_id: NullableStringField,
@@ -94,8 +120,10 @@ pub struct UpdatePatientRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ListPatientsQuery {
     include_archived: Option<bool>,
+    ipp: Option<String>,
     q: Option<String>,
     service: Option<String>,
+    limit: Option<i64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -109,6 +137,13 @@ enum NullableStringField {
     #[default]
     Missing,
     Present(Option<String>),
+}
+
+#[derive(Debug, Default)]
+enum NullableContactPersonsField {
+    #[default]
+    Missing,
+    Present(Option<Vec<ContactPerson>>),
 }
 
 #[derive(Debug, Default)]
@@ -133,7 +168,10 @@ async fn list_patients(
     Query(query): Query<ListPatientsQuery>,
 ) -> ApiResult<Json<Vec<Patient>>> {
     let search = query.q.unwrap_or_default();
-    let like_search = format!("%{}%", search.trim());
+    let trimmed_search = search.trim();
+    let like_search = format!("%{trimmed_search}%");
+    let ipp_search = query.ipp.unwrap_or_default();
+    let trimmed_ipp_search = ipp_search.trim();
     let service_filter = match query.service.as_deref() {
         Some(service) if !service.trim().is_empty() => {
             Some(services::canonical_service_name(&state, service).await?)
@@ -141,81 +179,68 @@ async fn list_patients(
         _ => None,
     };
     let include_archived = query.include_archived.unwrap_or(false);
-    let patients = if let Some(service) = service_filter {
-        sqlx::query_as::<_, Patient>(
+    let limit = query
+        .limit
+        .map(|limit| limit.clamp(1, MAX_PATIENT_LIST_LIMIT));
+
+    let mut query_builder = QueryBuilder::<Sqlite>::new("SELECT * FROM patients WHERE 1 = 1");
+
+    if let Some(service) = service_filter {
+        query_builder.push(" AND current_service = ");
+        query_builder.push_bind(service);
+    }
+
+    if !include_archived {
+        query_builder.push(" AND archived_at IS NULL");
+    }
+
+    if !trimmed_search.is_empty() {
+        query_builder.push(
             r#"
-            SELECT * FROM patients
-            WHERE current_service = ?
-              AND (? OR archived_at IS NULL)
-              AND (? = '%%'
-              OR first_name LIKE ?
-              OR last_name LIKE ?
-              OR email LIKE ?
-              OR phone_number LIKE ?
-              OR address LIKE ?
-              OR apartment_number LIKE ?)
-            ORDER BY last_name ASC, first_name ASC
-            "#,
-        )
-        .bind(service)
-        .bind(include_archived)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
+            AND (
+              first_name LIKE "#,
+        );
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR last_name LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR email LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR phone_number LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR address LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR apartment_number LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR admission_reason LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(" OR contact_persons LIKE ");
+        query_builder.push_bind(&like_search);
+        query_builder.push(")");
+    }
+
+    if !trimmed_ipp_search.is_empty() {
+        match trimmed_ipp_search.parse::<PatientId>() {
+            Ok(ipp) if ipp.to_string() == trimmed_ipp_search => {
+                query_builder.push(" AND id = ");
+                query_builder.push_bind(ipp);
+            }
+            _ => {
+                query_builder.push(" AND 1 = 0");
+            }
+        }
+    }
+
+    query_builder.push(" ORDER BY last_name ASC, first_name ASC");
+
+    if let Some(limit) = limit {
+        query_builder.push(" LIMIT ");
+        query_builder.push_bind(limit);
+    }
+
+    let patients = query_builder
+        .build_query_as::<Patient>()
         .fetch_all(&state.pool)
-        .await?
-    } else if include_archived {
-        sqlx::query_as::<_, Patient>(
-            r#"
-            SELECT * FROM patients
-            WHERE (? = '%%'
-              OR first_name LIKE ?
-              OR last_name LIKE ?
-              OR email LIKE ?
-              OR phone_number LIKE ?
-              OR address LIKE ?
-              OR apartment_number LIKE ?)
-            ORDER BY last_name ASC, first_name ASC
-            "#,
-        )
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .fetch_all(&state.pool)
-        .await?
-    } else {
-        sqlx::query_as::<_, Patient>(
-            r#"
-            SELECT * FROM patients
-            WHERE archived_at IS NULL
-              AND (? = '%%'
-                OR first_name LIKE ?
-                OR last_name LIKE ?
-                OR email LIKE ?
-                OR phone_number LIKE ?
-                OR address LIKE ?
-                OR apartment_number LIKE ?)
-            ORDER BY last_name ASC, first_name ASC
-            "#,
-        )
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .bind(&like_search)
-        .fetch_all(&state.pool)
-        .await?
-    };
+        .await?;
 
     Ok(Json(patients))
 }
@@ -223,9 +248,9 @@ async fn list_patients(
 async fn get_patient(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<PatientId>,
 ) -> ApiResult<Json<Patient>> {
-    let patient = require_patient_read_scope(&state, &id, &current_account).await?;
+    let patient = require_patient_read_scope(&state, id, &current_account).await?;
     Ok(Json(patient))
 }
 
@@ -242,6 +267,8 @@ async fn create_patient(
     let apartment_number = payload.apartment_number.and_then(normalize_optional);
     let phone_number = payload.phone_number.and_then(normalize_optional);
     let email = payload.email.and_then(normalize_optional);
+    let admission_reason = payload.admission_reason.and_then(normalize_optional);
+    let contact_persons = normalize_contact_persons(payload.contact_persons.unwrap_or_default())?;
     let bed_service = ensure_bed_assignable(&state, bed_id.as_deref(), None).await?;
     let current_service = resolve_patient_service(
         &state,
@@ -255,13 +282,14 @@ async fn create_patient(
     let patient = sqlx::query_as::<_, Patient>(
         r#"
         INSERT INTO patients (
-          id, first_name, last_name, birth_date, sex, address, apartment_number,
+          first_name, last_name, birth_date, sex, address, apartment_number,
           phone_number, email,
-          administrative_info, current_service, current_visit_id, current_visit_started_at,
+          admission_reason, administrative_info, contact_persons, current_service,
+          current_visit_id, current_visit_started_at,
           bed_id, weight, height
         )
         VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           'VIS-' || strftime('%Y%m%d-%H%M%S', 'now') || '-' || lower(hex(randomblob(2))),
           strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           ?, ?, ?
@@ -269,7 +297,6 @@ async fn create_patient(
         RETURNING *
         "#,
     )
-    .bind(Uuid::new_v4().to_string())
     .bind(payload.first_name.trim())
     .bind(payload.last_name.trim())
     .bind(payload.birth_date.trim())
@@ -278,7 +305,9 @@ async fn create_patient(
     .bind(apartment_number)
     .bind(phone_number)
     .bind(email)
+    .bind(admission_reason)
     .bind(payload.administrative_info.map(trim_optional))
+    .bind(contact_persons)
     .bind(current_service)
     .bind(bed_id)
     .bind(payload.weight)
@@ -290,9 +319,9 @@ async fn create_patient(
         &state,
         "patient",
         "created",
-        patient.id.clone(),
-        Some(patient.id.clone()),
-        ["patients", "patient"],
+        patient.id.to_string(),
+        Some(patient.id.to_string()),
+        ["patients", "patient", "admin"],
         &patient,
     );
 
@@ -302,12 +331,12 @@ async fn create_patient(
 async fn update_patient(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<PatientId>,
     ApiJson(payload): ApiJson<UpdatePatientRequest>,
 ) -> ApiResult<Json<Patient>> {
     payload.validate()?;
 
-    let current = require_patient_scope(&state, &id, &current_account).await?;
+    let current = require_patient_scope(&state, id, &current_account).await?;
     let requested_service = payload.current_service;
     let requested_bed = payload.bed_id;
     let should_infer_service_from_bed =
@@ -332,8 +361,12 @@ async fn update_patient(
         merge_nullable_string_field(payload.apartment_number, current.apartment_number);
     let phone_number = merge_nullable_string_field(payload.phone_number, current.phone_number);
     let email = merge_nullable_string_field(payload.email, current.email);
+    let admission_reason =
+        merge_nullable_string_field(payload.admission_reason, current.admission_reason);
     let administrative_info =
         merge_nullable_string_field(payload.administrative_info, current.administrative_info);
+    let contact_persons =
+        merge_nullable_contact_persons_field(payload.contact_persons, current.contact_persons)?;
     let weight = merge_nullable_f64_field(payload.weight, current.weight);
     let height = merge_nullable_f64_field(payload.height, current.height);
     let bed_id = match requested_bed {
@@ -341,7 +374,7 @@ async fn update_patient(
         NullableStringField::Present(None) => None,
         NullableStringField::Missing => current.bed_id,
     };
-    let bed_service = ensure_bed_assignable(&state, bed_id.as_deref(), Some(&id)).await?;
+    let bed_service = ensure_bed_assignable(&state, bed_id.as_deref(), Some(id)).await?;
     let service_fallback = if should_infer_service_from_bed {
         bed_service
             .as_deref()
@@ -373,7 +406,9 @@ async fn update_patient(
             apartment_number = ?,
             phone_number = ?,
             email = ?,
+            admission_reason = ?,
             administrative_info = ?,
+            contact_persons = ?,
             current_service = ?,
             bed_id = ?,
             weight = ?,
@@ -391,7 +426,9 @@ async fn update_patient(
     .bind(apartment_number)
     .bind(phone_number)
     .bind(email)
+    .bind(admission_reason)
     .bind(administrative_info.map(trim_optional))
+    .bind(contact_persons)
     .bind(current_service)
     .bind(bed_id)
     .bind(weight)
@@ -404,9 +441,9 @@ async fn update_patient(
         &state,
         "patient",
         "updated",
-        patient.id.clone(),
-        Some(patient.id.clone()),
-        ["patients", "patient"],
+        patient.id.to_string(),
+        Some(patient.id.to_string()),
+        ["patients", "patient", "admin"],
         &patient,
     );
 
@@ -416,9 +453,9 @@ async fn update_patient(
 async fn archive_patient(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<PatientId>,
 ) -> ApiResult<Json<Patient>> {
-    require_patient_scope(&state, &id, &current_account).await?;
+    require_patient_scope(&state, id, &current_account).await?;
 
     let patient = sqlx::query_as::<_, Patient>(
         r#"
@@ -439,9 +476,9 @@ async fn archive_patient(
         &state,
         "patient",
         "archived",
-        patient.id.clone(),
-        Some(patient.id.clone()),
-        ["patients", "patient"],
+        patient.id.to_string(),
+        Some(patient.id.to_string()),
+        ["patients", "patient", "admin"],
         &patient,
     );
 
@@ -451,29 +488,30 @@ async fn archive_patient(
 async fn start_new_visit(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<PatientId>,
     body: Bytes,
 ) -> ApiResult<Json<Patient>> {
-    require_patient_scope(&state, &id, &current_account).await?;
+    let current = require_patient_scope(&state, id, &current_account).await?;
 
     let payload = if body.is_empty() {
-        None
+        StartNewVisitRequest::default()
     } else {
-        Some(
-            serde_json::from_slice::<StartNewVisitRequest>(&body)
-                .map_err(|_| ApiError::bad_request("La demande de nouveau sejour est invalide"))?,
-        )
+        serde_json::from_slice::<StartNewVisitRequest>(&body)
+            .map_err(|_| ApiError::bad_request("La demande de nouveau sejour est invalide"))?
     };
-    let target_bed_id = payload
-        .and_then(|payload| payload.bed_id)
-        .and_then(normalize_optional);
-    let bed_service = ensure_bed_assignable(&state, target_bed_id.as_deref(), Some(&id)).await?;
+    let target_bed_id = payload.bed_id.and_then(normalize_optional);
+    let bed_service = ensure_bed_assignable(&state, target_bed_id.as_deref(), Some(id)).await?;
     let service_fallback = bed_service
         .as_deref()
         .unwrap_or(current_account.service.as_str());
     let visit_service = services::canonical_service_name(&state, service_fallback).await?;
     require_service_scope(&current_account, &visit_service)?;
     ensure_bed_matches_service(bed_service.as_deref(), &visit_service)?;
+    if current.current_visit_id.is_some() && current.current_service == visit_service {
+        return Err(ApiError::conflict(format!(
+            "Cette personne est deja dans le service {visit_service}",
+        )));
+    }
 
     let patient = sqlx::query_as::<_, Patient>(
         r#"
@@ -513,7 +551,7 @@ async fn start_new_visit(
         )
         .bind(visit_id)
         .bind(&patient.current_service)
-        .bind(&patient.id)
+        .bind(patient.id)
         .execute(&state.pool)
         .await?;
     }
@@ -522,9 +560,9 @@ async fn start_new_visit(
         &state,
         "patient",
         "updated",
-        patient.id.clone(),
-        Some(patient.id.clone()),
-        ["patients", "patient"],
+        patient.id.to_string(),
+        Some(patient.id.to_string()),
+        ["patients", "patient", "admin"],
         &patient,
     );
 
@@ -534,9 +572,9 @@ async fn start_new_visit(
 async fn end_visit(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<PatientId>,
 ) -> ApiResult<Json<Patient>> {
-    require_patient_scope(&state, &id, &current_account).await?;
+    require_patient_scope(&state, id, &current_account).await?;
 
     let patient = sqlx::query_as::<_, Patient>(
         r#"
@@ -558,16 +596,16 @@ async fn end_visit(
         &state,
         "patient",
         "updated",
-        patient.id.clone(),
-        Some(patient.id.clone()),
-        ["patients", "patient"],
+        patient.id.to_string(),
+        Some(patient.id.to_string()),
+        ["patients", "patient", "admin"],
         &patient,
     );
 
     Ok(Json(patient))
 }
 
-pub async fn patient_exists(state: &AppState, patient_id: &str) -> ApiResult<()> {
+pub async fn patient_exists(state: &AppState, patient_id: PatientId) -> ApiResult<()> {
     let exists: (i64,) = sqlx::query_as("SELECT COUNT(1) FROM patients WHERE id = ?")
         .bind(patient_id)
         .fetch_one(&state.pool)
@@ -582,7 +620,7 @@ pub async fn patient_exists(state: &AppState, patient_id: &str) -> ApiResult<()>
 
 pub async fn require_patient_scope(
     state: &AppState,
-    patient_id: &str,
+    patient_id: PatientId,
     _account: &CurrentAccount,
 ) -> ApiResult<Patient> {
     fetch_patient(state, patient_id).await
@@ -590,7 +628,7 @@ pub async fn require_patient_scope(
 
 pub async fn require_patient_read_scope(
     state: &AppState,
-    patient_id: &str,
+    patient_id: PatientId,
     _account: &CurrentAccount,
 ) -> ApiResult<Patient> {
     fetch_patient(state, patient_id).await
@@ -599,7 +637,7 @@ pub async fn require_patient_read_scope(
 async fn ensure_bed_assignable(
     state: &AppState,
     bed_id: Option<&str>,
-    patient_id: Option<&str>,
+    patient_id: Option<PatientId>,
 ) -> ApiResult<Option<String>> {
     let Some(bed_id) = bed_id else {
         return Ok(None);
@@ -615,7 +653,7 @@ async fn ensure_bed_assignable(
     };
 
     let occupied = if let Some(patient_id) = patient_id {
-        sqlx::query_as::<_, (String,)>(
+        sqlx::query_as::<_, (PatientId,)>(
             r#"
             SELECT id
             FROM patients
@@ -630,7 +668,7 @@ async fn ensure_bed_assignable(
         .fetch_optional(&state.pool)
         .await?
     } else {
-        sqlx::query_as::<_, (String,)>(
+        sqlx::query_as::<_, (PatientId,)>(
             r#"
             SELECT id
             FROM patients
@@ -651,7 +689,7 @@ async fn ensure_bed_assignable(
     Ok(Some(bed_service))
 }
 
-async fn fetch_patient(state: &AppState, id: &str) -> ApiResult<Patient> {
+async fn fetch_patient(state: &AppState, id: PatientId) -> ApiResult<Patient> {
     sqlx::query_as::<_, Patient>("SELECT * FROM patients WHERE id = ?")
         .bind(id)
         .fetch_optional(&state.pool)
@@ -719,10 +757,45 @@ fn merge_nullable_string_field(
     }
 }
 
+fn merge_nullable_contact_persons_field(
+    field: NullableContactPersonsField,
+    current_value: String,
+) -> ApiResult<String> {
+    match field {
+        NullableContactPersonsField::Missing => Ok(current_value),
+        NullableContactPersonsField::Present(Some(value)) => normalize_contact_persons(value),
+        NullableContactPersonsField::Present(None) => Ok("[]".to_string()),
+    }
+}
+
 fn merge_nullable_f64_field(field: NullableF64Field, current_value: Option<f64>) -> Option<f64> {
     match field {
         NullableF64Field::Missing => current_value,
         NullableF64Field::Present(value) => value,
+    }
+}
+
+fn normalize_contact_persons(contact_persons: Vec<ContactPerson>) -> ApiResult<String> {
+    let contact_persons = contact_persons
+        .into_iter()
+        .map(|contact_person| ContactPerson {
+            name: contact_person.name.trim().to_string(),
+            relationship: contact_person.relationship.trim().to_string(),
+            phone_number: contact_person.phone_number.trim().to_string(),
+            email: contact_person.email.trim().to_string(),
+        })
+        .filter(ContactPerson::has_content)
+        .collect::<Vec<_>>();
+
+    serde_json::to_string(&contact_persons).map_err(|error| ApiError::internal(error.to_string()))
+}
+
+impl ContactPerson {
+    fn has_content(&self) -> bool {
+        !self.name.is_empty()
+            || !self.relationship.is_empty()
+            || !self.phone_number.is_empty()
+            || !self.email.is_empty()
     }
 }
 
@@ -745,11 +818,29 @@ where
     Option::<String>::deserialize(deserializer).map(NullableStringField::Present)
 }
 
+fn deserialize_nullable_contact_persons_field<'de, D>(
+    deserializer: D,
+) -> Result<NullableContactPersonsField, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Vec<ContactPerson>>::deserialize(deserializer)
+        .map(NullableContactPersonsField::Present)
+}
+
 fn deserialize_nullable_f64_field<'de, D>(deserializer: D) -> Result<NullableF64Field, D::Error>
 where
     D: Deserializer<'de>,
 {
     Option::<f64>::deserialize(deserializer).map(NullableF64Field::Present)
+}
+
+fn serialize_contact_persons<S>(value: &str, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let contact_persons = serde_json::from_str::<Vec<ContactPerson>>(value).unwrap_or_default();
+    contact_persons.serialize(serializer)
 }
 
 fn normalize_optional(value: String) -> Option<String> {

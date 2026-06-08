@@ -1,9 +1,13 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
-import { ShieldCheck, Stethoscope, UserPlus, RefreshCw } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { ShieldCheck, UserPlus, RefreshCw } from "lucide-react";
 
 import { bootstrapAdmin, login } from "@/api";
 import { errorMessage } from "@/app/error-utils";
+import {
+  validateRequired,
+  validateRequiredEmail,
+} from "@/app/form-validation";
 import { AlertMessage } from "@/components/common/Feedback";
 import { Field } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
@@ -17,6 +21,17 @@ import {
 import { Input } from "@/components/ui/input";
 import type { Account } from "@/types";
 
+type LoginFormValues = {
+  email: string;
+  password: string;
+};
+
+type BootstrapFormValues = {
+  name: string;
+  email: string;
+  service: string;
+};
+
 export function AuthScreen({
   initialError,
   onAuthenticated,
@@ -25,23 +40,26 @@ export function AuthScreen({
   onAuthenticated: (account: Account) => void;
 }) {
   const [mode, setMode] = useState<"login" | "bootstrap">("login");
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
-  const [bootstrapForm, setBootstrapForm] = useState({
-    name: "",
-    email: "",
-    service: "",
+  const loginForm = useForm<LoginFormValues>({
+    defaultValues: { email: "", password: "" },
+    mode: "onSubmit",
+    reValidateMode: "onChange",
+  });
+  const bootstrapForm = useForm<BootstrapFormValues>({
+    defaultValues: { name: "", email: "", service: "" },
+    mode: "onSubmit",
+    reValidateMode: "onChange",
   });
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [message, setMessage] = useState(initialError);
   const [busy, setBusy] = useState(false);
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleLogin(values: LoginFormValues) {
     setBusy(true);
     setMessage("");
 
     try {
-      const session = await login(loginForm.email, loginForm.password);
+      const session = await login(values.email, values.password);
       onAuthenticated(session.account);
     } catch (error) {
       setMessage(errorMessage(error));
@@ -50,23 +68,20 @@ export function AuthScreen({
     }
   }
 
-  async function handleBootstrap(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleBootstrap(values: BootstrapFormValues) {
     setBusy(true);
     setMessage("");
     setGeneratedPassword("");
 
     try {
       const result = await bootstrapAdmin({
-        name: bootstrapForm.name,
-        email: bootstrapForm.email,
-        service: bootstrapForm.service,
+        name: values.name,
+        email: values.email,
+        service: values.service,
       });
       setGeneratedPassword(result.generatedPassword);
-      setLoginForm({
-        email: result.account.email,
-        password: result.generatedPassword,
-      });
+      loginForm.setValue("email", result.account.email);
+      loginForm.setValue("password", result.generatedPassword);
       setMode("login");
     } catch (error) {
       setMessage(errorMessage(error));
@@ -81,12 +96,16 @@ export function AuthScreen({
         <Card className="w-full rounded-3xl">
           <CardHeader>
             <div className="mb-2 flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Stethoscope className="size-5" />
+              <div
+                className="flex size-10 items-center justify-center rounded-lg border bg-card text-foreground"
+              >
+                <span className="text-xs font-semibold">
+                  CH
+                </span>
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">
-                  Hospitalinator
+                  CH de Versailles
                 </p>
                 <CardTitle>Connexion</CardTitle>
               </div>
@@ -124,33 +143,38 @@ export function AuthScreen({
             )}
 
             {mode === "login" ? (
-              <form className="grid gap-4" onSubmit={handleLogin}>
-                <Field label="Courriel" required>
+              <form
+                className="grid gap-4"
+                noValidate
+                onSubmit={loginForm.handleSubmit(handleLogin)}
+              >
+                <Field
+                  label="Courriel"
+                  required
+                  error={loginForm.formState.errors.email?.message}
+                >
                   <Input
-                    type="email"
+                    type="text"
+                    inputMode="email"
                     autoComplete="email"
-                    required
-                    value={loginForm.email}
-                    onChange={(event) =>
-                      setLoginForm((current) => ({
-                        ...current,
-                        email: event.target.value,
-                      }))
-                    }
+                    aria-invalid={!!loginForm.formState.errors.email}
+                    {...loginForm.register("email", {
+                      validate: validateRequiredEmail,
+                    })}
                   />
                 </Field>
-                <Field label="Mot de passe" required>
+                <Field
+                  label="Mot de passe"
+                  required
+                  error={loginForm.formState.errors.password?.message}
+                >
                   <Input
                     type="password"
                     autoComplete="current-password"
-                    required
-                    value={loginForm.password}
-                    onChange={(event) =>
-                      setLoginForm((current) => ({
-                        ...current,
-                        password: event.target.value,
-                      }))
-                    }
+                    aria-invalid={!!loginForm.formState.errors.password}
+                    {...loginForm.register("password", {
+                      validate: validateRequired,
+                    })}
                   />
                 </Field>
                 <Button type="submit" disabled={busy}>
@@ -163,42 +187,48 @@ export function AuthScreen({
                 </Button>
               </form>
             ) : (
-              <form className="grid gap-4" onSubmit={handleBootstrap}>
-                <Field label="Nom" required>
+              <form
+                className="grid gap-4"
+                noValidate
+                onSubmit={bootstrapForm.handleSubmit(handleBootstrap)}
+              >
+                <Field
+                  label="Nom"
+                  required
+                  error={bootstrapForm.formState.errors.name?.message}
+                >
                   <Input
-                    required
-                    value={bootstrapForm.name}
-                    onChange={(event) =>
-                      setBootstrapForm((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }))
-                    }
+                    aria-invalid={!!bootstrapForm.formState.errors.name}
+                    {...bootstrapForm.register("name", {
+                      validate: validateRequired,
+                    })}
                   />
                 </Field>
-                <Field label="Courriel" required>
+                <Field
+                  label="Courriel"
+                  required
+                  error={bootstrapForm.formState.errors.email?.message}
+                >
                   <Input
-                    type="email"
-                    required
-                    value={bootstrapForm.email}
-                    onChange={(event) =>
-                      setBootstrapForm((current) => ({
-                        ...current,
-                        email: event.target.value,
-                      }))
-                    }
+                    type="text"
+                    inputMode="email"
+                    autoComplete="email"
+                    aria-invalid={!!bootstrapForm.formState.errors.email}
+                    {...bootstrapForm.register("email", {
+                      validate: validateRequiredEmail,
+                    })}
                   />
                 </Field>
-                <Field label="Service initial" required>
+                <Field
+                  label="Service initial"
+                  required
+                  error={bootstrapForm.formState.errors.service?.message}
+                >
                   <Input
-                    required
-                    value={bootstrapForm.service}
-                    onChange={(event) =>
-                      setBootstrapForm((current) => ({
-                        ...current,
-                        service: event.target.value,
-                      }))
-                    }
+                    aria-invalid={!!bootstrapForm.formState.errors.service}
+                    {...bootstrapForm.register("service", {
+                      validate: validateRequired,
+                    })}
                   />
                 </Field>
                 <Button type="submit" disabled={busy}>

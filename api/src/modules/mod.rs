@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod auth;
 pub mod beds;
+pub mod doctors;
 pub mod documents;
 pub mod entrance_exams;
 pub mod evolutions;

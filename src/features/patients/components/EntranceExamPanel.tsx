@@ -1,38 +1,66 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Loader2, Plus, Save, Search } from "lucide-react";
+import {
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Save,
+  ScanLine,
+  Search,
+  Trash2,
+} from "lucide-react";
 
 import { searchClinicalReferences } from "@/api";
 import { formatShortDateTime } from "@/app/date-utils";
 import { errorMessage } from "@/app/error-utils";
 import { emptyAntecedentForm } from "@/app/form-state";
+import { richTextHasText } from "@/app/rich-text";
 import type { AntecedentFormState, EntranceExamFormState } from "@/app/types";
 import { Field } from "@/components/common/Field";
+import { RichTextDisplay, RichTextNoteField } from "@/components/common/RichText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui/popover";
-import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { canOpenDicomViewer } from "@/features/documents/imaging-document-utils";
 import { cn } from "@/lib/utils";
 import type {
   AntecedentCategory,
   ClinicalReference,
   ClinicalReferenceKind,
   EntranceExamRecord,
+  MedicalDocument,
 } from "@/types";
 
 const CLINICAL_REFERENCE_QUERY_MIN_LENGTH = 2;
+const ANTECEDENT_EDIT_WINDOW_MS = 60 * 60 * 1000;
+const ANTECEDENT_EDIT_REFRESH_INTERVAL_MS = 60 * 1000;
 
 const ANTECEDENT_LABELS: Record<AntecedentCategory, string> = {
   pathology: "Pathologies",
-  medical_act: "Actes médicaux",
+  medical_history: "Antécédents médicaux",
+  surgery: "Chirurgie",
 };
 
-const VISIBLE_ANTECEDENT_CATEGORIES = ["pathology", "medical_act"] as const;
+const VISIBLE_ANTECEDENT_CATEGORIES: AntecedentCategory[] = [
+  "pathology",
+  "medical_history",
+  "surgery",
+];
 
 export function EntranceExamPanel({
   exams,
@@ -42,7 +70,12 @@ export function EntranceExamPanel({
   loadingExams,
   patientHasActiveVisit,
   currentVisitId,
+  imagingDocuments,
+  readOnly = false,
+  readOnlyDescription,
   onChange,
+  onPrepareEntranceExam,
+  onViewImagingDocument,
   onLoadMore,
   onSubmit,
 }: {
@@ -53,21 +86,50 @@ export function EntranceExamPanel({
   loadingExams: boolean;
   patientHasActiveVisit: boolean;
   currentVisitId?: string | null;
+  imagingDocuments: MedicalDocument[];
+  readOnly?: boolean;
+  readOnlyDescription?: string;
   onChange: (form: EntranceExamFormState) => void;
+  onPrepareEntranceExam?: () => void;
+  onViewImagingDocument: (document: MedicalDocument) => void;
   onLoadMore: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const [pendingAntecedentIds, setPendingAntecedentIds] = useState<
     Partial<Record<AntecedentCategory, string>>
   >({});
+  const [editingAntecedentIds, setEditingAntecedentIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [selectedHistoryExam, setSelectedHistoryExam] =
+    useState<EntranceExamRecord | null>(null);
+  const [antecedentEditNow, setAntecedentEditNow] = useState(() => Date.now());
   const hasPendingAntecedent = form.antecedents.some((antecedent) =>
     Object.values(pendingAntecedentIds).includes(antecedent.id),
   );
   const isDraftMode = !patientHasActiveVisit;
-  const visibleExams = exams.filter((exam) => !exam.isDraft);
+  const visibleExams = useMemo(
+    () => exams.filter((exam) => !exam.isDraft),
+    [exams],
+  );
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setAntecedentEditNow(Date.now());
+    }, ANTECEDENT_EDIT_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   function updateField(
-    field: "lifestyle" | "diseaseHistory" | "synthesis",
+    field:
+      | "admissionReason"
+      | "lifestyle"
+      | "entranceTreatment"
+      | "diseaseHistory"
+      | "clinicalExam"
+      | "allergies"
+      | "synthesis",
     value: string,
   ) {
     onChange({ ...form, [field]: value });
@@ -106,6 +168,12 @@ export function EntranceExamPanel({
         Object.entries(current).filter(([, id]) => id !== antecedentId),
       ),
     );
+    setEditingAntecedentIds((current) => {
+      const next = { ...current };
+      delete next[antecedentId];
+
+      return next;
+    });
     onChange({
       ...form,
       antecedents: form.antecedents.filter(
@@ -114,12 +182,26 @@ export function EntranceExamPanel({
     });
   }
 
-  const groupedAntecedents = groupAntecedents(form.antecedents);
+  function editAntecedent(antecedentId: string) {
+    setEditingAntecedentIds((current) => ({
+      ...current,
+      [antecedentId]: true,
+    }));
+  }
+
+  const groupedAntecedents = useMemo(
+    () => groupAntecedents(form.antecedents),
+    [form.antecedents],
+  );
 
   return (
-    <form className="grid gap-4 rounded-3xl" onSubmit={onSubmit}>
+    <>
+      <form
+        className="grid gap-4 rounded-3xl"
+        onSubmit={readOnly ? (event) => event.preventDefault() : onSubmit}
+      >
       {!patientHasActiveVisit && (
-        <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-dashed bg-card p-4 text-sm text-muted-foreground">
           Aucun passage actif. Les informations enregistrées ici resteront en
           brouillon et seront reprises à la prochaine visite.
         </div>
@@ -129,7 +211,7 @@ export function EntranceExamPanel({
         <div className="grid content-start gap-4">
           <section
             className={cn(
-              "grid gap-3 rounded-3xl border bg-background p-4 shadow-sm",
+              "grid gap-3 rounded-lg border border-border bg-card p-3",
               isDraftMode && "border-dashed border-primary/40 bg-primary/5",
             )}
           >
@@ -137,7 +219,7 @@ export function EntranceExamPanel({
               <div className="grid gap-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-heading text-lg font-medium ">
-                    Examen courant
+                    Bilan médical initial
                   </h3>
                   {isDraftMode && <Badge variant="secondary">Brouillon</Badge>}
                 </div>
@@ -147,40 +229,99 @@ export function EntranceExamPanel({
                   </p>
                 )}
               </div>
-              <Button type="submit">
-                <Save className="size-4" />
-                {entranceExamSubmitLabel(patientHasActiveVisit, hasCurrentExam)}
-              </Button>
+              {readOnly ? (
+                onPrepareEntranceExam ? (
+                  <Button type="button" onClick={onPrepareEntranceExam}>
+                    <Plus className="size-4" />
+                    Préparer un bilan d'entrée
+                  </Button>
+                ) : null
+              ) : (
+                <Button type="submit">
+                  <Save className="size-4" />
+                  {entranceExamSubmitLabel(
+                    patientHasActiveVisit,
+                    hasCurrentExam,
+                  )}
+                </Button>
+              )}
             </div>
-            <div className="grid gap-3 lg:grid-cols-3">
-              <Field label="Mode de vie">
-                <Textarea
-                  className="min-h-40"
-                  value={form.lifestyle}
-                  onChange={(event) =>
-                    updateField("lifestyle", event.target.value)
-                  }
-                />
-              </Field>
-              <Field label="Historique de la maladie">
-                <Textarea
-                  className="min-h-40"
-                  value={form.diseaseHistory}
-                  onChange={(event) =>
-                    updateField("diseaseHistory", event.target.value)
-                  }
-                />
-              </Field>
-              <Field label="Synthèse">
-                <Textarea
-                  className="min-h-40"
-                  value={form.synthesis}
-                  onChange={(event) =>
-                    updateField("synthesis", event.target.value)
-                  }
-                />
-              </Field>
-            </div>
+            {readOnlyDescription && (
+              <p className="rounded-lg border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+                {readOnlyDescription}
+              </p>
+            )}
+            {readOnly ? (
+              <EntranceExamReadOnlyFields form={form} />
+            ) : (
+              <>
+                <Field label="Raison d'admission">
+                  <RichTextNoteField
+                    className="min-h-40"
+                    title="Raison d'admission"
+                    placeholder="Raison d'admission"
+                    value={form.admissionReason}
+                    onChange={(value) => updateField("admissionReason", value)}
+                  />
+                </Field>
+                <Field label="Mode de vie">
+                  <RichTextNoteField
+                    className="min-h-40"
+                    title="Mode de vie"
+                    placeholder="Mode de vie"
+                    value={form.lifestyle}
+                    onChange={(value) => updateField("lifestyle", value)}
+                  />
+                </Field>
+                <Field label="Traitement d'entrée">
+                  <RichTextNoteField
+                    className="min-h-40"
+                    title="Traitement d'entrée"
+                    placeholder="Traitement d'entrée"
+                    value={form.entranceTreatment}
+                    onChange={(value) =>
+                      updateField("entranceTreatment", value)
+                    }
+                  />
+                </Field>
+                <Field label="Histoire de la maladie">
+                  <RichTextNoteField
+                    className="min-h-40"
+                    title="Histoire de la maladie"
+                    placeholder="Histoire de la maladie"
+                    value={form.diseaseHistory}
+                    onChange={(value) => updateField("diseaseHistory", value)}
+                  />
+                </Field>
+                <Field label="Examen d'entrée">
+                  <RichTextNoteField
+                    className="min-h-40"
+                    title="Examen d'entrée"
+                    placeholder="Examen d'entrée"
+                    value={form.clinicalExam}
+                    onChange={(value) => updateField("clinicalExam", value)}
+                  />
+                </Field>
+                <Field label="Allergies">
+                  <RichTextNoteField
+                    className="min-h-32"
+                    title="Allergies"
+                    placeholder="Allergies connues, intolérances, réactions..."
+                    value={form.allergies}
+                    onChange={(value) => updateField("allergies", value)}
+                  />
+                </Field>
+                <Field label="Synthèse">
+                  <RichTextNoteField
+                    className="min-h-40"
+                    title="Synthèse"
+                    placeholder="Synthèse"
+                    value={form.synthesis}
+                    onChange={(value) => updateField("synthesis", value)}
+                  />
+                </Field>
+              </>
+            )}
           </section>
 
           <section className="grid gap-3">
@@ -188,7 +329,7 @@ export function EntranceExamPanel({
               Examens d'entrée
             </h3>
             {visibleExams.length === 0 && !loadingExams ? (
-              <div className="rounded-3xl border border-dashed p-4 text-sm text-muted-foreground">
+              <div className="rounded-3xl border border-dashed bg-card p-4 text-sm text-muted-foreground">
                 Aucun examen d'entrée enregistré.
               </div>
             ) : (
@@ -200,6 +341,7 @@ export function EntranceExamPanel({
                     active={
                       Boolean(currentVisitId) && exam.visitId === currentVisitId
                     }
+                    onOpen={() => setSelectedHistoryExam(exam)}
                   />
                 ))}
               </div>
@@ -223,10 +365,61 @@ export function EntranceExamPanel({
         </div>
 
         <aside className="grid content-start gap-4">
+          <div className="grid content-start gap-3 rounded-3xl border bg-card p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-2 font-medium">
+                <ScanLine className="size-4" />
+                Imagerie scanner
+              </p>
+              <Badge variant="secondary">{imagingDocuments.length}</Badge>
+            </div>
+            {imagingDocuments.length === 0 ? (
+              <p className="rounded-lg border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+                Aucun document d'imagerie.
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {imagingDocuments.map((document) => {
+                  const canView = canOpenDicomViewer(document);
+
+                  return (
+                    <div
+                      key={document.id}
+                      className="grid gap-2 rounded-2xl border bg-muted/20 p-3 text-sm"
+                    >
+                      <div>
+                        <p className="font-medium">{document.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {document.originalFileName ??
+                            document.storagePath ??
+                            "Reference d'imagerie"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canView}
+                        onClick={() => onViewImagingDocument(document)}
+                      >
+                        <ScanLine className="size-4" />
+                        Visualiser
+                      </Button>
+                      {!canView && (
+                        <p className="text-xs text-muted-foreground">
+                          Fichier DICOM requis pour la vue Cornerstone.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {VISIBLE_ANTECEDENT_CATEGORIES.map((category) => (
             <div
               key={category}
-              className="grid content-start gap-3 rounded-3xl border bg-background p-3 shadow-sm"
+              className="grid content-start gap-3 rounded-3xl border bg-card p-3"
             >
               <div className="flex items-center justify-between gap-2">
                 <p className="font-medium">{ANTECEDENT_LABELS[category]}</p>
@@ -238,11 +431,18 @@ export function EntranceExamPanel({
                 <AntecedentEditor
                   key={antecedent.id}
                   antecedent={antecedent}
+                  canEdit={
+                    !readOnly &&
+                    isAntecedentEditable(antecedent, antecedentEditNow)
+                  }
+                  isEditing={Boolean(editingAntecedentIds[antecedent.id])}
+                  isPending={pendingAntecedentIds[category] === antecedent.id}
+                  onEdit={() => editAntecedent(antecedent.id)}
                   onChange={(patch) => updateAntecedent(antecedent.id, patch)}
                   onRemove={() => removeAntecedent(antecedent.id)}
                 />
               ))}
-              {patientHasActiveVisit && !hasPendingAntecedent && (
+              {!readOnly && patientHasActiveVisit && !hasPendingAntecedent && (
                 <button
                   type="button"
                   className="grid min-h-24 place-items-center rounded-lg border border-dashed bg-muted/20 p-3 text-center text-sm text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -263,23 +463,36 @@ export function EntranceExamPanel({
           ))}
         </aside>
       </div>
-    </form>
+      </form>
+      <EntranceExamHistoryDialog
+        exam={selectedHistoryExam}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedHistoryExam(null);
+          }
+        }}
+      />
+    </>
   );
 }
 
 function EntranceExamHistoryCard({
   exam,
   active,
+  onOpen,
 }: {
   exam: EntranceExamRecord;
   active: boolean;
+  onOpen: () => void;
 }) {
   return (
-    <article
+    <button
+      type="button"
       className={cn(
-        "flex flex-col gap-3 rounded-3xl border bg-background p-4 shadow-sm",
+        "flex w-full flex-col gap-3 rounded-3xl border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         active && "border-primary/60 bg-primary/5 shadow-primary/10",
       )}
+      onClick={onOpen}
     >
       <div className="flex justify-between">
         <div className="grid gap-3">
@@ -302,12 +515,66 @@ function EntranceExamHistoryCard({
           </span>
         </div>
       </div>
-      <div className="grid gap-2 lg:grid-cols-3 w-full">
-        <HistoryTextBlock label="Mode de vie" value={exam.lifestyle} />
-        <HistoryTextBlock label="Historique" value={exam.diseaseHistory} />
-        <HistoryTextBlock label="Synthèse" value={exam.synthesis} />
+      <div className="rounded-lg border bg-muted/20 p-3">
+        <p className="text-xs font-medium text-muted-foreground">
+          Raison d'admission
+        </p>
+        <RichTextDisplay
+          className="mt-1 text-sm"
+          fallback="Non renseigné"
+          value={exam.admissionReason}
+        />
       </div>
-    </article>
+    </button>
+  );
+}
+
+function EntranceExamHistoryDialog({
+  exam,
+  onOpenChange,
+}: {
+  exam: EntranceExamRecord | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={exam !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-3xl">
+        {exam && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Examen d'entrée</DialogTitle>
+              <DialogDescription>
+                {exam.service} · {formatShortDateTime(exam.createdAt)} ·
+                Passage {exam.visitId}
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[70vh]">
+              <div className="grid gap-3 pr-2">
+                <HistoryTextBlock
+                  label="Raison d'admission"
+                  value={exam.admissionReason}
+                />
+                <HistoryTextBlock label="Mode de vie" value={exam.lifestyle} />
+                <HistoryTextBlock
+                  label="Traitement d'entrée"
+                  value={exam.entranceTreatment}
+                />
+                <HistoryTextBlock
+                  label="Histoire de la maladie"
+                  value={exam.diseaseHistory}
+                />
+                <HistoryTextBlock
+                  label="Examen d'entrée"
+                  value={exam.clinicalExam}
+                />
+                <HistoryTextBlock label="Allergies" value={exam.allergies} />
+                <HistoryTextBlock label="Synthèse" value={exam.synthesis} />
+              </div>
+            </ScrollArea>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -332,9 +599,34 @@ function HistoryTextBlock({
   return (
     <div className="rounded-lg border bg-muted/20 p-3">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 whitespace-pre-wrap">
-        {value?.trim() ? value : "Non renseigné"}
-      </p>
+      <RichTextDisplay
+        className="mt-1 text-sm"
+        fallback="Non renseigné"
+        value={value}
+      />
+    </div>
+  );
+}
+
+function EntranceExamReadOnlyFields({ form }: { form: EntranceExamFormState }) {
+  return (
+    <div className="grid gap-3">
+      <HistoryTextBlock
+        label="Raison d'admission"
+        value={form.admissionReason}
+      />
+      <HistoryTextBlock label="Mode de vie" value={form.lifestyle} />
+      <HistoryTextBlock
+        label="Traitement d'entrée"
+        value={form.entranceTreatment}
+      />
+      <HistoryTextBlock
+        label="Histoire de la maladie"
+        value={form.diseaseHistory}
+      />
+      <HistoryTextBlock label="Examen d'entrée" value={form.clinicalExam} />
+      <HistoryTextBlock label="Allergies" value={form.allergies} />
+      <HistoryTextBlock label="Synthèse" value={form.synthesis} />
     </div>
   );
 }
@@ -367,8 +659,12 @@ function addAntecedentLabel(category: AntecedentCategory) {
     return "Ajouter une pathologie";
   }
 
-  if (category === "medical_act") {
-    return "Ajouter un acte";
+  if (category === "medical_history") {
+    return "Ajouter un antécédent";
+  }
+
+  if (category === "surgery") {
+    return "Ajouter une chirurgie";
   }
 
   return "Ajouter une entrée";
@@ -376,58 +672,229 @@ function addAntecedentLabel(category: AntecedentCategory) {
 
 function AntecedentEditor({
   antecedent,
+  canEdit,
+  isEditing,
+  isPending,
+  onEdit,
   onChange,
   onRemove,
 }: {
   antecedent: AntecedentFormState;
+  canEdit: boolean;
+  isEditing: boolean;
+  isPending: boolean;
+  onEdit: () => void;
   onChange: (patch: Partial<AntecedentFormState>) => void;
   onRemove: () => void;
 }) {
+  const isPathology = antecedent.category === "pathology";
+  const editable = canEdit && (isPending || isEditing);
+  const showActions = canEdit && !isPending;
+
   return (
-    <div className="grid gap-3 rounded-2xl border p-3">
-      <div className="flex items-center justify-between gap-2"></div>
-
-      <ClinicalReferenceInput antecedent={antecedent} onChange={onChange} />
-
-      {(antecedent.source || antecedent.code) && (
-        <div className="flex flex-wrap gap-1.5 text-xs">
-          {antecedent.source && (
-            <Badge variant="secondary">{antecedent.source}</Badge>
-          )}
-          {antecedent.code && (
-            <Badge variant="outline">{antecedent.code}</Badge>
+    <div className="group/antecedent grid gap-3 rounded-2xl border bg-muted/20 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+        <div className="min-w-0">
+          {isPathology ? (
+            editable ? (
+              <ClinicalReferenceInput
+                antecedent={antecedent}
+                onChange={onChange}
+              />
+            ) : (
+              <AntecedentReferenceDisplay antecedent={antecedent} />
+            )
+          ) : editable ? (
+            <RichTextNoteField
+              className="min-h-20"
+              title={freeTextAntecedentInputLabel(antecedent.category)}
+              placeholder={freeTextAntecedentPlaceholder(antecedent.category)}
+              value={antecedent.label}
+              onChange={(value) =>
+                onChange({
+                  code: "",
+                  label: value,
+                  referenceQuery: value,
+                  source: "",
+                })
+              }
+            />
+          ) : (
+            <AntecedentTextDisplay value={antecedent.label} />
           )}
         </div>
+        {showActions && (
+          <AntecedentActions
+            canEdit={!isEditing}
+            onEdit={onEdit}
+            onRemove={onRemove}
+          />
+        )}
+      </div>
+
+      {isPathology && (
+        <>
+          {(antecedent.source || antecedent.code) && (
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              {antecedent.source && (
+                <Badge variant="secondary">{antecedent.source}</Badge>
+              )}
+              {antecedent.code && (
+                <Badge variant="outline">{antecedent.code}</Badge>
+              )}
+            </div>
+          )}
+
+          {editable ? (
+            <RichTextNoteField
+              className="min-h-20"
+              title="Notes d'antécédent"
+              placeholder="Notes"
+              value={antecedent.notes}
+              onChange={(value) => onChange({ notes: value })}
+            />
+          ) : antecedent.notes ? (
+            <RichTextDisplay
+              className="rounded-md border bg-muted/20 p-2 text-xs"
+              value={antecedent.notes}
+            />
+          ) : null}
+        </>
       )}
 
-      <Field label="Notes">
-        <Textarea
-          className="min-h-20"
-          value={antecedent.notes}
-          onChange={(event) => onChange({ notes: event.target.value })}
-        />
-      </Field>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="destructive"
-          aria-label="Supprimer l'antécédent"
-          className="flex-1"
-          onClick={onRemove}
-        >
-          Annuler
-        </Button>
-        <Button
-          className="flex-1"
-          type="submit"
-          variant="default"
-          aria-label="Ajouter l'antécédent"
-        >
-          Ajouter
-        </Button>
-      </div>
+      {isPending && editable && (
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="destructive"
+            aria-label="Annuler la création"
+            className="flex-1"
+            onClick={onRemove}
+          >
+            Annuler
+          </Button>
+          <Button
+            className="flex-1"
+            type="submit"
+            variant="default"
+            aria-label="Ajouter l'entrée"
+            disabled={!richTextHasText(antecedent.label)}
+          >
+            Ajouter
+          </Button>
+        </div>
+      )}
     </div>
   );
+}
+
+function AntecedentReferenceDisplay({
+  antecedent,
+}: {
+  antecedent: AntecedentFormState;
+}) {
+  return (
+    <div className="flex min-h-10 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs">
+      <Search className="size-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate">
+        {antecedentReferenceLabel(antecedent)}
+      </span>
+    </div>
+  );
+}
+
+function AntecedentTextDisplay({ value }: { value?: string | null }) {
+  return (
+    <div className="min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs">
+      <RichTextDisplay fallback="Non renseigné" value={value} />
+    </div>
+  );
+}
+
+function AntecedentActions({
+  canEdit,
+  onEdit,
+  onRemove,
+}: {
+  canEdit: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  function edit() {
+    setOpen(false);
+    onEdit();
+  }
+
+  function remove() {
+    setOpen(false);
+    onRemove();
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Actions"
+          className="mt-0.5 shrink-0 opacity-0 transition-opacity group-hover/antecedent:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+        >
+          <MoreVertical className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-40 p-1">
+        {canEdit && (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            onClick={edit}
+          >
+            <Pencil className="size-4" />
+            Modifier
+          </button>
+        )}
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10 focus-visible:outline-none"
+          onClick={remove}
+        >
+          <Trash2 className="size-4" />
+          Supprimer
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function antecedentReferenceLabel(antecedent: AntecedentFormState) {
+  if (antecedent.referenceQuery.trim()) {
+    return antecedent.referenceQuery;
+  }
+
+  if (antecedent.code && antecedent.label) {
+    return `${antecedent.code} - ${antecedent.label}`;
+  }
+
+  return antecedent.label || "Non renseigné";
+}
+
+function freeTextAntecedentInputLabel(category: AntecedentCategory) {
+  if (category === "surgery") {
+    return "Chirurgie";
+  }
+
+  return "Antécédent médical";
+}
+
+function freeTextAntecedentPlaceholder(category: AntecedentCategory) {
+  if (category === "surgery") {
+    return "Saisir une chirurgie";
+  }
+
+  return "Saisir un antécédent médical";
 }
 
 function ClinicalReferenceInput({
@@ -443,7 +910,7 @@ function ClinicalReferenceInput({
   const [searchError, setSearchError] = useState("");
   const [popoverContainer, setPopoverContainer] =
     useState<HTMLDivElement | null>(null);
-  const kind = antecedent.category as ClinicalReferenceKind;
+  const kind: ClinicalReferenceKind = "pathology";
   const query = antecedent.referenceQuery.trim();
   const selected = antecedent.code !== "";
 
@@ -516,88 +983,90 @@ function ClinicalReferenceInput({
 
   return (
     <div ref={setPopoverContainer} className="grid gap-1">
-      <Field label={antecedent.category === "pathology" ? "CIM-10" : "CCAM"}>
-        <Popover open={showResults} onOpenChange={setOpen}>
-          <PopoverAnchor asChild>
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pr-2.5 pl-8"
-                value={antecedent.referenceQuery || antecedent.label}
-                onFocus={() => setOpen(true)}
-                onChange={(event) => handleQueryChange(event.target.value)}
-              />
-            </div>
-          </PopoverAnchor>
-          <PopoverContent
-            align="end"
-            className="w-[min(34rem,calc(100vw-2rem))] p-1"
-            container={popoverContainer ?? undefined}
-            onOpenAutoFocus={(event) => event.preventDefault()}
-          >
-            <div className="max-h-72 overflow-auto overscroll-contain">
-              {loading && (
-                <p className="px-3 py-2 text-sm text-muted-foreground">
-                  Recherche...
-                </p>
-              )}
-              {!loading && searchError && (
-                <p className="px-3 py-2 text-sm text-destructive">
-                  {searchError}
-                </p>
-              )}
-              {!loading && !searchError && results.length === 0 && (
-                <p className="px-3 py-2 text-sm text-muted-foreground">
-                  Aucune référence trouvée
-                </p>
-              )}
-              {!loading &&
-                !searchError &&
-                results.map((reference) => (
-                  <button
-                    key={reference.id}
-                    type="button"
-                    className="grid w-full gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                    onClick={() => selectReference(reference)}
-                  >
-                    <span className="font-medium">{reference.label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {reference.source} {reference.code}
-                    </span>
-                  </button>
-                ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </Field>
-      {selected && (
-        <button
-          type="button"
-          className="w-fit text-xs text-muted-foreground underline-offset-4 hover:underline"
-          onClick={() =>
-            onChange({
-              source: "",
-              code: "",
-              referenceQuery: antecedent.label,
-            })
-          }
+      <Popover open={showResults} onOpenChange={setOpen}>
+        <PopoverAnchor asChild>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Rechercher une pathologie"
+              className="pr-2.5 pl-8"
+              placeholder="Rechercher une pathologie"
+              value={antecedent.referenceQuery || antecedent.label}
+              onFocus={() => setOpen(true)}
+              onChange={(event) => handleQueryChange(event.target.value)}
+            />
+          </div>
+        </PopoverAnchor>
+        <PopoverContent
+          align="end"
+          className="w-[min(34rem,calc(100vw-2rem))] p-1"
+          container={popoverContainer ?? undefined}
+          onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          Modifier la référence
-        </button>
-      )}
+          <ScrollArea className="max-h-72 [&_[data-slot=scroll-area-viewport]]:overscroll-contain">
+            {loading && (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                Recherche...
+              </p>
+            )}
+            {!loading && searchError && (
+              <p className="px-3 py-2 text-sm text-destructive">
+                {searchError}
+              </p>
+            )}
+            {!loading && !searchError && results.length === 0 && (
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                Aucune référence trouvée
+              </p>
+            )}
+            {!loading &&
+              !searchError &&
+              results.map((reference) => (
+                <button
+                  key={reference.id}
+                  type="button"
+                  className="grid w-full gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                  onClick={() => selectReference(reference)}
+                >
+                  <span className="font-medium">{reference.label}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {reference.source} {reference.code}
+                  </span>
+                </button>
+              ))}
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
 
+function isAntecedentEditable(
+  antecedent: AntecedentFormState,
+  now = Date.now(),
+) {
+  if (!antecedent.createdAt) {
+    return true;
+  }
+
+  const createdAt = Date.parse(antecedent.createdAt);
+
+  if (Number.isNaN(createdAt)) {
+    return false;
+  }
+
+  return now - createdAt <= ANTECEDENT_EDIT_WINDOW_MS;
+}
+
 function groupAntecedents(antecedents: AntecedentFormState[]) {
-  return antecedents.reduce(
-    (groups, antecedent) => {
-      groups[antecedent.category].push(antecedent);
-      return groups;
-    },
-    {
-      pathology: [],
-      medical_act: [],
-    } as Record<AntecedentCategory, AntecedentFormState[]>,
-  );
+  const groups: Record<AntecedentCategory, AntecedentFormState[]> = {
+    pathology: [],
+    medical_history: [],
+    surgery: [],
+  };
+
+  return antecedents.reduce((groups, antecedent) => {
+    groups[antecedent.category].push(antecedent);
+    return groups;
+  }, groups);
 }

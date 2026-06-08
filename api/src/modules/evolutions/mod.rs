@@ -11,7 +11,7 @@ use crate::{
     error::{ApiError, ApiJson, ApiResult},
     modules::{
         auth::CurrentAccount,
-        patients::{require_patient_read_scope, require_patient_scope},
+        patients::{require_patient_read_scope, require_patient_scope, PatientId},
         services,
     },
     realtime::publish_change,
@@ -23,7 +23,7 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct EvolutionNote {
     id: String,
-    patient_id: String,
+    patient_id: PatientId,
     service: String,
     visit_id: String,
     author: String,
@@ -53,9 +53,9 @@ pub fn routes() -> Router<AppState> {
 async fn list_evolution_notes(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
 ) -> ApiResult<Json<Vec<EvolutionNote>>> {
-    require_patient_read_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, patient_id, &current_account).await?;
 
     let notes = sqlx::query_as::<_, EvolutionNote>(
         "SELECT * FROM evolution_notes WHERE patient_id = ? ORDER BY recorded_at DESC, created_at DESC",
@@ -70,10 +70,10 @@ async fn list_evolution_notes(
 async fn add_evolution_note(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
     ApiJson(payload): ApiJson<AddEvolutionNoteRequest>,
 ) -> ApiResult<Json<EvolutionNote>> {
-    let patient = require_patient_scope(&state, &patient_id, &current_account).await?;
+    let patient = require_patient_scope(&state, patient_id, &current_account).await?;
     payload.validate()?;
     let service = match payload.service.as_deref() {
         Some(service) if !service.trim().is_empty() => {
@@ -98,7 +98,7 @@ async fn add_evolution_note(
         "#,
     )
     .bind(Uuid::new_v4().to_string())
-    .bind(patient_id.clone())
+    .bind(patient_id)
     .bind(service)
     .bind(payload.visit_id.trim())
     .bind(payload.author.trim())
@@ -113,7 +113,7 @@ async fn add_evolution_note(
         "evolutionNote",
         "created",
         note.id.clone(),
-        Some(patient_id),
+        Some(patient_id.to_string()),
         ["patient", "evolution"],
         &note,
     );

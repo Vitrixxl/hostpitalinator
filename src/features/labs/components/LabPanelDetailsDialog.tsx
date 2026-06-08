@@ -7,10 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Table,
   TableBody,
   TableCell,
+  TableEmptyRow,
   TableHead,
   TableHeader,
   TableRow,
@@ -38,7 +40,16 @@ export function LabPanelDetailsDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="max-h-[60vh] overflow-auto rounded-3xl border">
+            {panel.note ? (
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Note de demande
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">{panel.note}</p>
+              </div>
+            ) : null}
+
+            <ScrollArea className="max-h-[60vh] rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -63,9 +74,12 @@ export function LabPanelDetailsDialog({
                       </TableCell>
                     </TableRow>
                   ))}
+                  {panel.results.length === 0 && (
+                    <TableEmptyRow colSpan={4}>Aucun resultat</TableEmptyRow>
+                  )}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollArea>
           </div>
         )}
       </DialogContent>

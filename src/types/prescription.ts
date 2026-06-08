@@ -1,6 +1,8 @@
+import type { PatientId } from "@/types/patient"
+
 export type Prescription = {
   id: string
-  patientId: string
+  patientId: PatientId
   medicineId?: string | null
   medication: string
   dosage: string

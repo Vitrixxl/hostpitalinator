@@ -1,5 +1,5 @@
 import { callApi } from "@/api/client"
-import type { Prescription } from "@/types"
+import type { PatientIdentifier, Prescription } from "@/types"
 
 export type AddPrescriptionInput = {
   medicineId: string
@@ -11,12 +11,12 @@ export type AddPrescriptionInput = {
   status: string
 }
 
-export function listPrescriptions(patientId: string) {
+export function listPrescriptions(patientId: PatientIdentifier) {
   return callApi<Prescription[]>(`/patients/${patientId}/prescriptions`)
 }
 
 export function addPrescription(
-  patientId: string,
+  patientId: PatientIdentifier,
   input: AddPrescriptionInput
 ) {
   return callApi<Prescription>(`/patients/${patientId}/prescriptions`, {

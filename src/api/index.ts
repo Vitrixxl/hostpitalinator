@@ -9,7 +9,7 @@ export {
   type CreateAccountInput,
   type GeneratedAccountCredentials,
   type UpdateAccountInput,
-} from "@/api/accounts.api"
+} from "@/api/accounts.api";
 export {
   bootstrapAdmin,
   getCurrentAccount,
@@ -18,7 +18,7 @@ export {
   type AuthSession,
   type BootstrapAdminResponse,
   type BootstrapAdminInput,
-} from "@/api/auth.api"
+} from "@/api/auth.api";
 export {
   createBed,
   deleteBed,
@@ -26,38 +26,49 @@ export {
   updateBed,
   type CreateBedInput,
   type UpdateBedInput,
-} from "@/api/beds.api"
+} from "@/api/beds.api";
 export {
   addMedicalDocument,
   downloadMedicalDocument,
+  downloadMedicalDocumentBlob,
   listMedicalDocuments,
   openMedicalDocument,
   type AddMedicalDocumentInput,
   type OpenMedicalDocumentResponse,
-} from "@/api/documents.api"
+} from "@/api/documents.api";
 export {
   addEvolutionNote,
   listEvolutionNotes,
   type AddEvolutionNoteInput,
-} from "@/api/evolutions.api"
+} from "@/api/evolutions.api";
+export {
+  addPatientDoctorFollowup,
+  deletePatientDoctorFollowup,
+  listPatientDoctorFollowups,
+  searchDoctors,
+  updatePatientDoctorFollowup,
+  type SavePatientDoctorFollowupInput,
+} from "@/api/doctors.api";
 export {
   getEntranceExam,
   listEntranceExams,
   saveEntranceExam,
   searchClinicalReferences,
   type SaveEntranceExamInput,
-} from "@/api/entrance-exams.api"
-export { healthCheck } from "@/api/health.api"
+} from "@/api/entrance-exams.api";
+export { healthCheck } from "@/api/health.api";
 export {
   searchAddressSuggestions,
   type AddressSuggestion,
-} from "@/api/geocoding.api"
+} from "@/api/geocoding.api";
 export {
   addLabResult,
   listLabResults,
+  updateLabResult,
   type AddLabResultInput,
-} from "@/api/labs.api"
-export { searchMedicines } from "@/api/medicines.api"
+  type UpdateLabResultInput,
+} from "@/api/labs.api";
+export { searchMedicines } from "@/api/medicines.api";
 export {
   archivePatient,
   createPatient,
@@ -68,27 +79,27 @@ export {
   updatePatient,
   type CreatePatientInput,
   type UpdatePatientInput,
-} from "@/api/patients.api"
+} from "@/api/patients.api";
 export {
   createService,
   deleteService,
   listServices,
   updateService,
   type ServiceInput,
-} from "@/api/services.api"
+} from "@/api/services.api";
 export {
   createRoom,
   deleteRoom,
   listRooms,
   updateRoom,
   type RoomInput,
-} from "@/api/rooms.api"
+} from "@/api/rooms.api";
 export {
   addPrescription,
   listPrescriptions,
   updatePrescriptionStatus,
   type AddPrescriptionInput,
-} from "@/api/prescriptions.api"
+} from "@/api/prescriptions.api";
 export {
   connectRealtime,
   disconnectRealtime,
@@ -97,7 +108,7 @@ export {
   type RealtimeContext,
   type RealtimeEvent,
   type RealtimeMessage,
-} from "@/api/realtime.api"
+} from "@/api/realtime.api";
 export {
   addVitalRecord,
   deleteVitalRecord,
@@ -105,4 +116,4 @@ export {
   listVitalRecords,
   updateVitalRecord,
   type VitalRecordInput,
-} from "@/api/vitals.api"
+} from "@/api/vitals.api";

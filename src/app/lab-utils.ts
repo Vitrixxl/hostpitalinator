@@ -1,5 +1,5 @@
 import { labPanelDefinition } from "@/types"
-import type { LabPanel, LabStatus } from "@/types"
+import type { LabPanel, LabResultStatus, LabStatus } from "@/types"
 
 import { LAB_STATUS_LABELS } from "./constants"
 import { defaultLabFormResult } from "./form-state"
@@ -25,7 +25,7 @@ export function formatLabPanelPreview(panel: LabPanel) {
     .join(" · ")
 
   if (!preview) {
-    return "-"
+    return panel.status === "en attente" ? "En attente de resultats" : "-"
   }
 
   const remainingCount = panel.results.length - 3
@@ -72,7 +72,11 @@ export function labFormResultsToInput(form: LabFormState) {
     .filter((result) => result.value.length > 0)
 }
 
-export function worstLabStatus(statuses: LabStatus[]): LabStatus {
+export function worstLabStatus(statuses: LabResultStatus[]): LabStatus {
+  if (statuses.length === 0) {
+    return "en attente"
+  }
+
   if (statuses.includes("critique")) {
     return "critique"
   }

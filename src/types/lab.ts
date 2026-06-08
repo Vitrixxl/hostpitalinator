@@ -1,6 +1,16 @@
-export const LAB_STATUSES = ["normal", "alerte", "critique", "a verifier"] as const
+import type { PatientId } from "@/types/patient"
+
+export const LAB_RESULT_STATUSES = [
+  "normal",
+  "alerte",
+  "critique",
+  "a verifier",
+] as const
+
+export const LAB_STATUSES = ["en attente", ...LAB_RESULT_STATUSES] as const
 
 export type LabStatus = (typeof LAB_STATUSES)[number]
+export type LabResultStatus = (typeof LAB_RESULT_STATUSES)[number]
 
 export type LabMarkerDefinition = {
   key: string
@@ -228,16 +238,17 @@ export type LabPanelResult = {
   value: string
   unit: string
   referenceInterval: string
-  status: LabStatus | string
+  status: LabResultStatus | string
   sortOrder: number
 }
 
 export type LabPanel = {
   id: string
-  patientId: string
+  patientId: PatientId
   sampledAt: string
   panelType: LabPanelType | string
   status: LabStatus | string
+  note: string
   createdAt: string
   results: LabPanelResult[]
 }

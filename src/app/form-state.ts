@@ -20,15 +20,22 @@ import {
   nowLocalInput,
   todayInput,
 } from "./date-utils"
+import {
+  normalizeRichText,
+  richTextHasText,
+  richTextNullableOptionalValue,
+} from "./rich-text"
 import type {
   AccountFormState,
   AntecedentFormState,
   BedFormState,
+  DoctorFollowupFormState,
   DocumentFormState,
   EvolutionFormState,
   EntranceExamFormState,
   LabFormResultState,
   LabFormState,
+  PatientContactPersonFormState,
   PatientFormState,
   PrescriptionDurationUnit,
   PrescriptionFilters,
@@ -49,9 +56,21 @@ export function emptyPatientForm(currentService = ""): PatientFormState {
     apartmentNumber: "",
     phoneNumber: "",
     email: "",
+    admissionReason: "",
     currentService,
     bedId: "",
     administrativeInfo: "",
+    contactPersons: [emptyPatientContactPersonForm()],
+  }
+}
+
+export function emptyPatientContactPersonForm(): PatientContactPersonFormState {
+  return {
+    clientId: createFormClientId(),
+    name: "",
+    relationship: "",
+    phoneNumber: "",
+    email: "",
   }
 }
 
@@ -63,6 +82,9 @@ export function emptyVitalForm(): VitalFormState {
     systolicBloodPressure: "",
     diastolicBloodPressure: "",
     oxygenSaturation: "",
+    bloodGlucose: "",
+    oxygenTherapy: false,
+    oxygenFlowLiters: "",
     weight: "",
     diuresis: "",
     lastStoolDate: "",
@@ -77,6 +99,11 @@ export function vitalRecordToForm(record: VitalRecord): VitalFormState {
     systolicBloodPressure: record.systolicBloodPressure.toString(),
     diastolicBloodPressure: record.diastolicBloodPressure.toString(),
     oxygenSaturation: record.oxygenSaturation.toString(),
+    bloodGlucose:
+      record.bloodGlucose == null ? "" : record.bloodGlucose.toString(),
+    oxygenTherapy: record.oxygenTherapy,
+    oxygenFlowLiters:
+      record.oxygenFlowLiters == null ? "" : record.oxygenFlowLiters.toString(),
     weight: record.weight.toString(),
     diuresis: record.diuresis == null ? "" : record.diuresis.toString(),
     lastStoolDate: dateInput(record.lastStoolDate),
@@ -94,6 +121,13 @@ export function vitalFormToInput(
     systolicBloodPressure: Number(form.systolicBloodPressure),
     diastolicBloodPressure: Number(form.diastolicBloodPressure),
     oxygenSaturation: Number(form.oxygenSaturation),
+    bloodGlucose:
+      form.bloodGlucose.trim() === "" ? undefined : Number(form.bloodGlucose),
+    oxygenTherapy: form.oxygenTherapy,
+    oxygenFlowLiters:
+      form.oxygenTherapy && form.oxygenFlowLiters.trim() !== ""
+        ? Number(form.oxygenFlowLiters)
+        : undefined,
     weight: Number(form.weight),
     diuresis: form.diuresis.trim() === "" ? undefined : Number(form.diuresis),
     lastStoolDate: form.lastStoolDate,
@@ -156,6 +190,7 @@ function addMonthsClamped(date: Date, months: number) {
 
 export function emptyPrescriptionMedicationForm(): PrescriptionMedicationFormState {
   return {
+    clientId: createFormClientId(),
     medicineId: "",
     medication: "",
     medicationQuery: "",
@@ -171,6 +206,7 @@ export function trimPrescriptionMedicationForm(
   medication: PrescriptionMedicationFormState
 ): PrescriptionMedicationFormState {
   return {
+    clientId: medication.clientId,
     medicineId: medication.medicineId.trim(),
     medication: medication.medication.trim(),
     medicationQuery: medication.medicationQuery.trim(),
@@ -180,6 +216,12 @@ export function trimPrescriptionMedicationForm(
     durationValue: medication.durationValue.trim(),
     durationUnit: medication.durationUnit,
   }
+}
+
+function createFormClientId() {
+  return (
+    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
+  )
 }
 
 export function defaultMedicineRoute(medicine: Medicine) {
@@ -217,13 +259,24 @@ export function emptyPrescriptionFilters(): PrescriptionFilters {
   }
 }
 
+export function emptyDoctorFollowupForm(): DoctorFollowupFormState {
+  return {
+    doctorId: "",
+    specialty: "",
+    startDate: todayInput(),
+    endDate: "",
+  }
+}
+
 export function emptyLabForm(
   panelType = LAB_PANEL_TYPES[0],
-  sampledAt = nowLocalInput()
+  sampledAt = nowLocalInput(),
+  note = ""
 ): LabFormState {
   return {
     sampledAt,
     panelType,
+    note,
     results: labFormResultDefaults(panelType),
   }
 }
@@ -248,6 +301,7 @@ export function emptyDocumentForm(): DocumentFormState {
   return {
     title: "",
     category: "report",
+    note: "",
     storagePath: "",
   }
 }
@@ -266,8 +320,12 @@ export function emptyEvolutionForm(
 
 export function emptyEntranceExamForm(): EntranceExamFormState {
   return {
+    admissionReason: "",
     lifestyle: "",
+    entranceTreatment: "",
     diseaseHistory: "",
+    clinicalExam: "",
+    allergies: "",
     synthesis: "",
     antecedents: [],
   }
@@ -284,13 +342,18 @@ export function emptyAntecedentForm(
     label: "",
     notes: "",
     referenceQuery: "",
+    createdAt: "",
   }
 }
 
 export function entranceExamToForm(exam: EntranceExam): EntranceExamFormState {
   return {
+    admissionReason: exam.exam?.admissionReason ?? "",
     lifestyle: exam.exam?.lifestyle ?? "",
+    entranceTreatment: exam.exam?.entranceTreatment ?? "",
     diseaseHistory: exam.exam?.diseaseHistory ?? "",
+    clinicalExam: exam.exam?.clinicalExam ?? "",
+    allergies: exam.exam?.allergies ?? "",
     synthesis: exam.exam?.synthesis ?? "",
     antecedents: exam.antecedents.map(antecedentToForm),
   }
@@ -303,30 +366,59 @@ function antecedentToForm(antecedent: PatientAntecedent): AntecedentFormState {
 
   return {
     id: antecedent.id,
-    category: antecedent.category,
+    category: normalizeAntecedentCategory(antecedent.category),
     source: antecedent.source ?? "",
     code: antecedent.code ?? "",
     label: antecedent.label,
     notes: antecedent.notes ?? "",
     referenceQuery,
+    createdAt: antecedent.createdAt,
   }
 }
 
 export function entranceExamFormToInput(form: EntranceExamFormState) {
   return {
-    lifestyle: form.lifestyle.trim() || null,
-    diseaseHistory: form.diseaseHistory.trim() || null,
-    synthesis: form.synthesis.trim() || null,
+    admissionReason: richTextNullableOptionalValue(form.admissionReason),
+    lifestyle: richTextNullableOptionalValue(form.lifestyle),
+    entranceTreatment: richTextNullableOptionalValue(form.entranceTreatment),
+    diseaseHistory: richTextNullableOptionalValue(form.diseaseHistory),
+    clinicalExam: richTextNullableOptionalValue(form.clinicalExam),
+    allergies: richTextNullableOptionalValue(form.allergies),
+    synthesis: richTextNullableOptionalValue(form.synthesis),
     antecedents: form.antecedents
       .map((antecedent) => ({
+        id: antecedent.createdAt ? antecedent.id : undefined,
         category: antecedent.category,
-        source: antecedent.source.trim() || null,
-        code: antecedent.code.trim() || null,
-        label: antecedent.label.trim(),
-        notes: antecedent.notes.trim() || null,
+        source:
+          antecedent.category === "pathology"
+            ? antecedent.source.trim() || null
+            : null,
+        code:
+          antecedent.category === "pathology"
+            ? antecedent.code.trim() || null
+            : null,
+        label:
+          antecedent.category === "pathology"
+            ? antecedent.label.trim()
+            : normalizeRichText(antecedent.label),
+        notes: richTextNullableOptionalValue(antecedent.notes),
       }))
-      .filter((antecedent) => antecedent.label !== ""),
+      .filter((antecedent) => richTextHasText(antecedent.label)),
   }
+}
+
+function normalizeAntecedentCategory(
+  category: PatientAntecedent["category"]
+): AntecedentCategory {
+  if (category === "medical_act") {
+    return "surgery"
+  }
+
+  if (category === "heavy_treatment") {
+    return "medical_history"
+  }
+
+  return category
 }
 
 export function defaultVisitId() {
@@ -366,6 +458,8 @@ export function emptyBedForm(roomId = ""): BedFormState {
 }
 
 export function patientToForm(patient: Patient): PatientFormState {
+  const contactPersons = patient.contactPersons ?? []
+
   return {
     firstName: patient.firstName,
     lastName: patient.lastName,
@@ -375,10 +469,35 @@ export function patientToForm(patient: Patient): PatientFormState {
     apartmentNumber: patient.apartmentNumber ?? "",
     phoneNumber: patient.phoneNumber ?? "",
     email: patient.email ?? "",
+    admissionReason: patient.admissionReason ?? "",
     currentService: patient.currentService,
     bedId: patient.bedId ?? "",
     administrativeInfo: patient.administrativeInfo ?? "",
+    contactPersons: contactPersons.length
+      ? contactPersons.map((contactPerson) => ({
+          clientId: createFormClientId(),
+          name: contactPerson.name,
+          relationship: contactPerson.relationship,
+          phoneNumber: contactPerson.phoneNumber,
+          email: contactPerson.email,
+        }))
+      : [emptyPatientContactPersonForm()],
   }
+}
+
+export function patientContactPersonsFormToInput(
+  contactPersons: PatientContactPersonFormState[]
+) {
+  return contactPersons
+    .map((contactPerson) => ({
+      name: contactPerson.name.trim(),
+      relationship: contactPerson.relationship.trim(),
+      phoneNumber: contactPerson.phoneNumber.trim(),
+      email: contactPerson.email.trim(),
+    }))
+    .filter((contactPerson) =>
+      Object.values(contactPerson).some((value) => value !== "")
+    )
 }
 
 export function serviceToForm(service: Service): ServiceFormState {

@@ -5,7 +5,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use uuid::Uuid;
 
 use crate::{
     error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
@@ -21,7 +20,7 @@ const ROLES: &[&str] = &["admin", "doctor", "nurse", "secretary"];
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
-    id: String,
+    id: i64,
     name: String,
     email: String,
     role: String,
@@ -104,7 +103,7 @@ async fn list_accounts(
 async fn get_account(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> ApiResult<Json<Account>> {
     require_admin(&current_account)?;
 
@@ -126,7 +125,6 @@ async fn create_account(
     payload.validate()?;
     let service = services::canonical_service_name(&state, &payload.service).await?;
 
-    let id = Uuid::new_v4().to_string();
     let generated_password = generate_password();
     let password_hash = hash_password(&generated_password)?;
     let status = if payload.invite.unwrap_or(false) {
@@ -137,12 +135,11 @@ async fn create_account(
 
     let account = sqlx::query_as::<_, Account>(
         r#"
-        INSERT INTO accounts (id, name, email, role, service, status, password_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO accounts (name, email, role, service, status, password_hash)
+        VALUES (?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
-    .bind(id)
     .bind(payload.name.trim())
     .bind(payload.email.trim())
     .bind(payload.role)
@@ -163,7 +160,7 @@ async fn create_account(
         &state,
         "account",
         "created",
-        account.id.clone(),
+        account.id.to_string(),
         None,
         ["admin", "accounts"],
         &account,
@@ -178,7 +175,7 @@ async fn create_account(
 async fn update_account(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     ApiJson(payload): ApiJson<UpdateAccountRequest>,
 ) -> ApiResult<Json<Account>> {
     require_admin(&current_account)?;
@@ -226,7 +223,7 @@ async fn update_account(
         &state,
         "account",
         "updated",
-        account.id.clone(),
+        account.id.to_string(),
         None,
         ["admin", "accounts"],
         &account,
@@ -238,7 +235,7 @@ async fn update_account(
 async fn disable_account(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> ApiResult<Json<Account>> {
     require_admin(&current_account)?;
 
@@ -268,7 +265,7 @@ async fn disable_account(
         &state,
         "account",
         "disabled",
-        account.id.clone(),
+        account.id.to_string(),
         None,
         ["admin", "accounts"],
         &account,
@@ -280,7 +277,7 @@ async fn disable_account(
 async fn assign_role(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     ApiJson(payload): ApiJson<AssignRoleRequest>,
 ) -> ApiResult<Json<Account>> {
     require_admin(&current_account)?;
@@ -304,7 +301,7 @@ async fn assign_role(
         &state,
         "account",
         "roleAssigned",
-        account.id.clone(),
+        account.id.to_string(),
         None,
         ["admin", "accounts"],
         &account,
@@ -316,7 +313,7 @@ async fn assign_role(
 async fn reset_password(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> ApiResult<Json<AccountWithGeneratedPassword>> {
     require_admin(&current_account)?;
 
@@ -348,7 +345,7 @@ async fn reset_password(
         &state,
         "account",
         "passwordReset",
-        account.id.clone(),
+        account.id.to_string(),
         None,
         ["admin", "accounts"],
         &account,

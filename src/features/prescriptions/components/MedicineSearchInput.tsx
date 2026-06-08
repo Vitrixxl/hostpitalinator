@@ -13,6 +13,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Medicine } from "@/types"
 
 export function MedicineSearchInput({
@@ -123,7 +124,7 @@ export function MedicineSearchInput({
           container={popoverContainer ?? undefined}
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
-          <div className="max-h-72 overflow-auto overscroll-contain">
+          <ScrollArea className="max-h-72 [&_[data-slot=scroll-area-viewport]]:overscroll-contain">
             {loading && (
               <p className="px-3 py-2 text-sm text-muted-foreground">
                 Recherche...
@@ -165,7 +166,7 @@ export function MedicineSearchInput({
                   ) : null}
                 </button>
               ))}
-          </div>
+          </ScrollArea>
         </PopoverContent>
       </Popover>
       {selected && (

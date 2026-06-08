@@ -1,4 +1,4 @@
-import type { PatientSex } from "@/types/patient"
+import type { PatientId, PatientSex } from "@/types/patient"
 
 export type Bed = {
   id: string
@@ -7,7 +7,7 @@ export type Bed = {
   room: string
   service: string
   sortOrder: number
-  occupiedPatientId?: string | null
+  occupiedPatientId?: PatientId | null
   occupiedPatientName?: string | null
   occupiedPatientSex?: PatientSex | null
 }

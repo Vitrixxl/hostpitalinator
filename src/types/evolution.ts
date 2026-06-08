@@ -1,8 +1,9 @@
 import type { UserRole } from "@/types/account"
+import type { PatientId } from "@/types/patient"
 
 export type EvolutionNote = {
   id: string
-  patientId: string
+  patientId: PatientId
   service: string
   visitId: string
   author: string

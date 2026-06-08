@@ -11,6 +11,7 @@ use crate::{
     error::{is_unique_constraint, ApiError, ApiJson, ApiResult},
     modules::{
         auth::{require_admin, CurrentAccount},
+        patients::PatientId,
         services,
     },
     realtime::publish_change,
@@ -290,7 +291,7 @@ async fn ensure_occupied_room_can_move(
     room_id: &str,
     service: &str,
 ) -> ApiResult<()> {
-    let patient: Option<(String,)> = sqlx::query_as(
+    let patient: Option<(PatientId,)> = sqlx::query_as(
         r#"
         SELECT patients.id
         FROM beds

@@ -1,0 +1,2 @@
+ALTER TABLE lab_panels
+  ADD COLUMN note TEXT NOT NULL DEFAULT '';

@@ -8,27 +8,34 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiJson, ApiResult},
+    error::{ApiError, ApiJson, ApiResult},
     modules::{
         auth::CurrentAccount,
-        patients::{require_patient_read_scope, require_patient_scope, Patient},
+        patients::{require_patient_read_scope, require_patient_scope, Patient, PatientId},
     },
     realtime::publish_change,
     state::AppState,
     validation::{require_non_empty, require_positive_f64, require_positive_i64},
 };
 
+const VITAL_RECORD_EDIT_WINDOW_SECONDS: i64 = 30 * 60;
+const VITAL_RECORD_EDIT_WINDOW_EXPIRED_MESSAGE: &str =
+    "Les constantes ne sont modifiables que pendant 30 minutes apres leur creation";
+
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct VitalRecord {
     id: String,
-    patient_id: String,
+    patient_id: PatientId,
     recorded_at: String,
     temperature: f64,
     heart_rate: i64,
     systolic_blood_pressure: i64,
     diastolic_blood_pressure: i64,
     oxygen_saturation: f64,
+    blood_glucose: Option<f64>,
+    oxygen_therapy: bool,
+    oxygen_flow_liters: Option<f64>,
     weight: f64,
     height: Option<f64>,
     diuresis: Option<f64>,
@@ -45,6 +52,10 @@ pub struct AddVitalRecordRequest {
     systolic_blood_pressure: i64,
     diastolic_blood_pressure: i64,
     oxygen_saturation: f64,
+    blood_glucose: Option<f64>,
+    #[serde(default)]
+    oxygen_therapy: bool,
+    oxygen_flow_liters: Option<f64>,
     weight: f64,
     height: Option<f64>,
     diuresis: Option<f64>,
@@ -70,9 +81,9 @@ pub fn routes() -> Router<AppState> {
 async fn list_vital_records(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
 ) -> ApiResult<Json<Vec<VitalRecord>>> {
-    require_patient_read_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, patient_id, &current_account).await?;
 
     let records = sqlx::query_as::<_, VitalRecord>(
         "SELECT * FROM vital_records WHERE patient_id = ? ORDER BY recorded_at DESC, created_at DESC",
@@ -87,9 +98,9 @@ async fn list_vital_records(
 async fn get_latest_vital_record(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
 ) -> ApiResult<Json<Option<VitalRecord>>> {
-    require_patient_read_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, patient_id, &current_account).await?;
 
     let record = sqlx::query_as::<_, VitalRecord>(
         "SELECT * FROM vital_records WHERE patient_id = ? ORDER BY recorded_at DESC, created_at DESC LIMIT 1",
@@ -104,11 +115,12 @@ async fn get_latest_vital_record(
 async fn add_vital_record(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
     ApiJson(payload): ApiJson<AddVitalRecordRequest>,
 ) -> ApiResult<Json<VitalRecord>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_scope(&state, patient_id, &current_account).await?;
     payload.validate()?;
+    let oxygen_flow_liters = payload.normalized_oxygen_flow_liters();
 
     let record = sqlx::query_as::<_, VitalRecord>(
         r#"
@@ -121,23 +133,29 @@ async fn add_vital_record(
           systolic_blood_pressure,
           diastolic_blood_pressure,
           oxygen_saturation,
+          blood_glucose,
+          oxygen_therapy,
+          oxygen_flow_liters,
           weight,
           height,
           diuresis,
           last_stool_date
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
     .bind(Uuid::new_v4().to_string())
-    .bind(patient_id.clone())
+    .bind(patient_id)
     .bind(payload.recorded_at.trim())
     .bind(payload.temperature)
     .bind(payload.heart_rate)
     .bind(payload.systolic_blood_pressure)
     .bind(payload.diastolic_blood_pressure)
     .bind(payload.oxygen_saturation)
+    .bind(payload.blood_glucose)
+    .bind(payload.oxygen_therapy)
+    .bind(oxygen_flow_liters)
     .bind(payload.weight)
     .bind(payload.height)
     .bind(payload.diuresis)
@@ -145,14 +163,14 @@ async fn add_vital_record(
     .fetch_one(&state.pool)
     .await?;
 
-    let synced_patient = sync_patient_measurements_from_latest_vital(&state, &patient_id).await?;
+    let synced_patient = sync_patient_measurements_from_latest_vital(&state, patient_id).await?;
 
     publish_change(
         &state,
         "vitalRecord",
         "created",
         record.id.clone(),
-        Some(patient_id.clone()),
+        Some(patient_id.to_string()),
         ["patient", "vitals"],
         &record,
     );
@@ -164,11 +182,13 @@ async fn add_vital_record(
 async fn update_vital_record(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path((patient_id, id)): Path<(String, String)>,
+    Path((patient_id, id)): Path<(PatientId, String)>,
     ApiJson(payload): ApiJson<AddVitalRecordRequest>,
 ) -> ApiResult<Json<VitalRecord>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_scope(&state, patient_id, &current_account).await?;
+    require_vital_record_editable(&state, patient_id, &id).await?;
     payload.validate()?;
+    let oxygen_flow_liters = payload.normalized_oxygen_flow_liters();
 
     let record = sqlx::query_as::<_, VitalRecord>(
         r#"
@@ -180,6 +200,9 @@ async fn update_vital_record(
           systolic_blood_pressure = ?,
           diastolic_blood_pressure = ?,
           oxygen_saturation = ?,
+          blood_glucose = ?,
+          oxygen_therapy = ?,
+          oxygen_flow_liters = ?,
           weight = ?,
           height = ?,
           diuresis = ?,
@@ -194,23 +217,26 @@ async fn update_vital_record(
     .bind(payload.systolic_blood_pressure)
     .bind(payload.diastolic_blood_pressure)
     .bind(payload.oxygen_saturation)
+    .bind(payload.blood_glucose)
+    .bind(payload.oxygen_therapy)
+    .bind(oxygen_flow_liters)
     .bind(payload.weight)
     .bind(payload.height)
     .bind(payload.diuresis)
     .bind(payload.last_stool_date.trim())
     .bind(id)
-    .bind(patient_id.clone())
+    .bind(patient_id)
     .fetch_one(&state.pool)
     .await?;
 
-    let synced_patient = sync_patient_measurements_from_latest_vital(&state, &patient_id).await?;
+    let synced_patient = sync_patient_measurements_from_latest_vital(&state, patient_id).await?;
 
     publish_change(
         &state,
         "vitalRecord",
         "updated",
         record.id.clone(),
-        Some(patient_id.clone()),
+        Some(patient_id.to_string()),
         ["patient", "vitals"],
         &record,
     );
@@ -219,12 +245,46 @@ async fn update_vital_record(
     Ok(Json(record))
 }
 
+async fn require_vital_record_editable(
+    state: &AppState,
+    patient_id: PatientId,
+    id: &str,
+) -> ApiResult<()> {
+    let is_editable = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT CASE
+          WHEN strftime('%s', created_at) IS NOT NULL
+           AND CAST(strftime('%s', 'now') AS INTEGER)
+             - CAST(strftime('%s', created_at) AS INTEGER) <= ?
+          THEN 1
+          ELSE 0
+        END
+        FROM vital_records
+        WHERE id = ? AND patient_id = ?
+        "#,
+    )
+    .bind(VITAL_RECORD_EDIT_WINDOW_SECONDS)
+    .bind(id)
+    .bind(patient_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("Ressource introuvable"))?;
+
+    if is_editable == 1 {
+        return Ok(());
+    }
+
+    Err(ApiError::forbidden(
+        VITAL_RECORD_EDIT_WINDOW_EXPIRED_MESSAGE,
+    ))
+}
+
 async fn delete_vital_record(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path((patient_id, id)): Path<(String, String)>,
+    Path((patient_id, id)): Path<(PatientId, String)>,
 ) -> ApiResult<Json<VitalRecord>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_scope(&state, patient_id, &current_account).await?;
 
     let record = sqlx::query_as::<_, VitalRecord>(
         r#"
@@ -234,18 +294,18 @@ async fn delete_vital_record(
         "#,
     )
     .bind(id)
-    .bind(patient_id.clone())
+    .bind(patient_id)
     .fetch_one(&state.pool)
     .await?;
 
-    let synced_patient = sync_patient_measurements_from_latest_vital(&state, &patient_id).await?;
+    let synced_patient = sync_patient_measurements_from_latest_vital(&state, patient_id).await?;
 
     publish_change(
         &state,
         "vitalRecord",
         "deleted",
         record.id.clone(),
-        Some(patient_id),
+        Some(patient_id.to_string()),
         ["patient", "vitals"],
         &record,
     );
@@ -256,7 +316,7 @@ async fn delete_vital_record(
 
 async fn sync_patient_measurements_from_latest_vital(
     state: &AppState,
-    patient_id: &str,
+    patient_id: PatientId,
 ) -> ApiResult<Option<Patient>> {
     let latest_measurement = sqlx::query_as::<_, (f64, Option<f64>)>(
         r#"
@@ -303,8 +363,8 @@ fn publish_synced_patient(state: &AppState, patient: Option<Patient>) {
         state,
         "patient",
         "updated",
-        patient.id.clone(),
-        Some(patient.id.clone()),
+        patient.id.to_string(),
+        Some(patient.id.to_string()),
         ["patients", "patient"],
         &patient,
     );
@@ -318,6 +378,17 @@ impl AddVitalRecordRequest {
         require_positive_i64(self.systolic_blood_pressure, "systolicBloodPressure")?;
         require_positive_i64(self.diastolic_blood_pressure, "diastolicBloodPressure")?;
         require_positive_f64(self.oxygen_saturation, "oxygenSaturation")?;
+        if let Some(blood_glucose) = self.blood_glucose {
+            require_positive_f64(blood_glucose, "bloodGlucose")?;
+        }
+        if self.oxygen_therapy && self.oxygen_flow_liters.is_none() {
+            return Err(crate::error::ApiError::bad_request(
+                "Le debit d'oxygene est obligatoire".to_string(),
+            ));
+        }
+        if let Some(oxygen_flow_liters) = self.oxygen_flow_liters {
+            require_positive_f64(oxygen_flow_liters, "oxygenFlowLiters")?;
+        }
         require_positive_f64(self.weight, "weight")?;
         if let Some(height) = self.height {
             require_positive_f64(height, "height")?;
@@ -329,5 +400,11 @@ impl AddVitalRecordRequest {
         }
 
         Ok(())
+    }
+
+    fn normalized_oxygen_flow_liters(&self) -> Option<f64> {
+        self.oxygen_therapy
+            .then_some(self.oxygen_flow_liters)
+            .flatten()
     }
 }

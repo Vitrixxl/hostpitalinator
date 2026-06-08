@@ -1,4 +1,5 @@
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
@@ -9,13 +10,14 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::path::Path as FsPath;
+use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiJson, ApiResult},
     modules::{
         auth::CurrentAccount,
-        patients::{require_patient_read_scope, require_patient_scope},
+        patients::{require_patient_read_scope, require_patient_scope, PatientId},
     },
     realtime::publish_change,
     state::AppState,
@@ -31,13 +33,14 @@ const CATEGORIES: &[&str] = &[
     "administrative",
 ];
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Clone, Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct MedicalDocument {
     id: String,
-    patient_id: String,
+    patient_id: PatientId,
     title: String,
     category: String,
+    note: Option<String>,
     created_at: String,
     storage_path: Option<String>,
     mime_type: Option<String>,
@@ -57,6 +60,7 @@ pub struct OpenMedicalDocumentResponse {
 pub struct AddMedicalDocumentRequest {
     title: String,
     category: String,
+    note: Option<String>,
     storage_path: Option<String>,
     mime_type: Option<String>,
     original_file_name: Option<String>,
@@ -82,17 +86,17 @@ pub fn routes() -> Router<AppState> {
 async fn list_medical_documents(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
     Query(query): Query<ListMedicalDocumentsQuery>,
 ) -> ApiResult<Json<Vec<MedicalDocument>>> {
-    require_patient_read_scope(&state, &patient_id, &current_account).await?;
+    require_patient_read_scope(&state, patient_id, &current_account).await?;
 
     let documents = if let Some(category) = query.category {
         require_one_of(&category, "category", CATEGORIES)?;
         sqlx::query_as::<_, MedicalDocument>(
             "SELECT * FROM medical_documents WHERE patient_id = ? AND category = ? ORDER BY created_at DESC",
     )
-    .bind(patient_id.clone())
+    .bind(patient_id)
         .bind(category)
         .fetch_all(&state.pool)
         .await?
@@ -111,13 +115,13 @@ async fn list_medical_documents(
 async fn add_medical_document(
     State(state): State<AppState>,
     Extension(current_account): Extension<CurrentAccount>,
-    Path(patient_id): Path<String>,
+    Path(patient_id): Path<PatientId>,
     ApiJson(payload): ApiJson<AddMedicalDocumentRequest>,
 ) -> ApiResult<Json<MedicalDocument>> {
-    require_patient_scope(&state, &patient_id, &current_account).await?;
+    require_patient_scope(&state, patient_id, &current_account).await?;
     payload.validate()?;
     let id = Uuid::new_v4().to_string();
-    let stored_file = store_uploaded_file(&state, &patient_id, &id, &payload).await?;
+    let stored_file = store_uploaded_file(&state, patient_id, &id, &payload).await?;
 
     let document = sqlx::query_as::<_, MedicalDocument>(
         r#"
@@ -126,19 +130,21 @@ async fn add_medical_document(
           patient_id,
           title,
           category,
+          note,
           storage_path,
           mime_type,
           original_file_name,
           file_size_bytes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING *
         "#,
     )
     .bind(id)
-    .bind(patient_id.clone())
+    .bind(patient_id)
     .bind(payload.title.trim())
     .bind(payload.category)
+    .bind(payload.note.map(trim_optional))
     .bind(
         stored_file
             .storage_path
@@ -155,7 +161,7 @@ async fn add_medical_document(
         "medicalDocument",
         "created",
         document.id.clone(),
-        Some(patient_id),
+        Some(patient_id.to_string()),
         ["patient", "documents"],
         &document,
     );
@@ -174,7 +180,7 @@ async fn open_medical_document(
             .fetch_optional(&state.pool)
             .await?
             .ok_or_else(|| ApiError::not_found("Document medical introuvable"))?;
-    require_patient_read_scope(&state, &document.patient_id, &current_account).await?;
+    require_patient_read_scope(&state, document.patient_id, &current_account).await?;
 
     let storage_path = document.storage_path.clone();
 
@@ -195,7 +201,7 @@ async fn download_medical_document(
             .fetch_optional(&state.pool)
             .await?
             .ok_or_else(|| ApiError::not_found("Document medical introuvable"))?;
-    require_patient_read_scope(&state, &document.patient_id, &current_account).await?;
+    require_patient_read_scope(&state, document.patient_id, &current_account).await?;
 
     let storage_path = document
         .storage_path
@@ -203,9 +209,13 @@ async fn download_medical_document(
         .ok_or_else(|| ApiError::not_found("Aucun fichier stocke pour ce document"))?;
     let storage_path = FsPath::new(storage_path);
     ensure_download_path_allowed(&state, storage_path).await?;
-    let bytes = tokio::fs::read(storage_path)
+    let file = tokio::fs::File::open(storage_path)
         .await
         .map_err(|_| ApiError::not_found("Fichier stocke introuvable"))?;
+    let metadata = file
+        .metadata()
+        .await
+        .map_err(|error| ApiError::internal(error.to_string()))?;
 
     let mut headers = HeaderMap::new();
     let content_type = document
@@ -215,6 +225,16 @@ async fn download_medical_document(
         .parse::<HeaderValue>()
         .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
     headers.insert(header::CONTENT_TYPE, content_type);
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
+    headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
+
+    if let Ok(value) = HeaderValue::from_str(&metadata.len().to_string()) {
+        headers.insert(header::CONTENT_LENGTH, value);
+    }
 
     let filename = document
         .original_file_name
@@ -226,7 +246,7 @@ async fn download_medical_document(
         headers.insert(header::CONTENT_DISPOSITION, value);
     }
 
-    Ok((headers, bytes).into_response())
+    Ok((headers, Body::from_stream(ReaderStream::new(file))).into_response())
 }
 
 async fn ensure_download_path_allowed(state: &AppState, storage_path: &FsPath) -> ApiResult<()> {
@@ -271,7 +291,7 @@ struct StoredFile {
 
 async fn store_uploaded_file(
     state: &AppState,
-    patient_id: &str,
+    patient_id: PatientId,
     document_id: &str,
     payload: &AddMedicalDocumentRequest,
 ) -> ApiResult<StoredFile> {
@@ -297,7 +317,7 @@ async fn store_uploaded_file(
     let sanitized_name =
         sanitize_file_name(original_file_name.as_deref().unwrap_or("document.bin"));
     let stored_name = format!("{document_id}-{sanitized_name}");
-    let patient_dir = state.file_storage_dir.join(patient_id);
+    let patient_dir = state.file_storage_dir.join(patient_id.to_string());
     tokio::fs::create_dir_all(&patient_dir)
         .await
         .map_err(|error| ApiError::internal(error.to_string()))?;

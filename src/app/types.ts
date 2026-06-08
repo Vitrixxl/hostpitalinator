@@ -2,7 +2,7 @@ import type {
   Account,
   AntecedentCategory,
   LabPanelType,
-  LabStatus,
+  LabResultStatus,
   PatientSex,
   UserRole,
 } from "@/types"
@@ -10,6 +10,7 @@ import type {
 export type PatientTab =
   | "summary"
   | "entrance"
+  | "doctors"
   | "vitals"
   | "prescriptions"
   | "labs"
@@ -25,9 +26,19 @@ export type PatientFormState = {
   apartmentNumber: string
   phoneNumber: string
   email: string
+  admissionReason: string
   currentService: string
   bedId: string
   administrativeInfo: string
+  contactPersons: PatientContactPersonFormState[]
+}
+
+export type PatientContactPersonFormState = {
+  clientId: string
+  name: string
+  relationship: string
+  phoneNumber: string
+  email: string
 }
 
 export type VitalFormState = {
@@ -37,12 +48,16 @@ export type VitalFormState = {
   systolicBloodPressure: string
   diastolicBloodPressure: string
   oxygenSaturation: string
+  bloodGlucose: string
+  oxygenTherapy: boolean
+  oxygenFlowLiters: string
   weight: string
   diuresis: string
   lastStoolDate: string
 }
 
 export type PrescriptionMedicationFormState = {
+  clientId: string
   medicineId: string
   medication: string
   medicationQuery: string
@@ -67,15 +82,23 @@ export type PrescriptionFilters = {
   startDateTo: string
 }
 
+export type DoctorFollowupFormState = {
+  doctorId: string
+  specialty: string
+  startDate: string
+  endDate: string
+}
+
 export type LabFormState = {
   sampledAt: string
   panelType: LabPanelType
+  note: string
   results: Record<string, LabFormResultState>
 }
 
 export type LabFormResultState = {
   value: string
-  status: LabStatus
+  status: LabResultStatus
 }
 
 export type LabMarkerRangeFilter = {
@@ -86,6 +109,7 @@ export type LabMarkerRangeFilter = {
 export type DocumentFormState = {
   title: string
   category: import("@/types").MedicalDocumentCategory
+  note: string
   storagePath: string
 }
 
@@ -104,11 +128,16 @@ export type AntecedentFormState = {
   label: string
   notes: string
   referenceQuery: string
+  createdAt: string
 }
 
 export type EntranceExamFormState = {
+  admissionReason: string
   lifestyle: string
+  entranceTreatment: string
   diseaseHistory: string
+  clinicalExam: string
+  allergies: string
   synthesis: string
   antecedents: AntecedentFormState[]
 }

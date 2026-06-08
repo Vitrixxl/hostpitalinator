@@ -30,7 +30,8 @@ where
     let cors = CorsLayer::new()
         .allow_origin(cors_allow_origin(web_origins))
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers(Any)
+        .allow_private_network(true);
 
     let protected_routes = Router::new()
         .route("/health", get(health_check))
@@ -41,6 +42,7 @@ where
         .merge(modules::beds::routes())
         .merge(modules::patients::routes())
         .merge(modules::entrance_exams::routes())
+        .merge(modules::doctors::routes())
         .merge(modules::medicines::routes())
         .merge(modules::vitals::routes())
         .merge(modules::prescriptions::routes())

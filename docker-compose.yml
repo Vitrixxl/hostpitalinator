@@ -3,7 +3,7 @@ services:
     build:
       context: .
     ports:
-      - "${APP_PORT:-4000}:4000"
+      - "127.0.0.1:${CDYNATOR_PORT}:4000"
     environment:
       API_HOST: 0.0.0.0
       API_PORT: 4000

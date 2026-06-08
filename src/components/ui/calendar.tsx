@@ -41,7 +41,7 @@ function Calendar({
           "flex size-8 items-center justify-center rounded-md text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         ),
         selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+          "rounded-md bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground dark:border dark:border-border dark:bg-foreground/10 dark:text-foreground dark:hover:bg-foreground/15 dark:hover:text-foreground",
         today: "bg-accent text-accent-foreground",
         outside: "text-muted-foreground opacity-50",
         disabled: "text-muted-foreground opacity-50",

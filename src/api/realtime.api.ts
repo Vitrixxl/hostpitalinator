@@ -1,138 +1,138 @@
-import { getApiAuthToken, getApiBaseUrl } from "@/api/client"
+import { getApiAuthToken, getApiBaseUrl } from "@/api/client";
 
 export type RealtimeContext = {
-  patientId?: string
-  page?: string
-}
+  patientId?: string;
+  page?: string;
+};
 
 export type RealtimeEvent<TPayload = unknown> = {
-  id: string
-  entity: string
-  action: string
-  resourceId: string
-  patientId?: string
-  pages: string[]
-  payload: TPayload
-}
+  id: string;
+  entity: string;
+  action: string;
+  resourceId: string;
+  patientId?: string;
+  pages: string[];
+  payload: TPayload;
+};
 
 export type RealtimeMessage =
   | {
-      type: "connected"
-      accountId: string
+      type: "connected";
+      accountId: number;
     }
   | {
-      type: "contextUpdated"
-      context: RealtimeContext
+      type: "contextUpdated";
+      context: RealtimeContext;
     }
   | {
-      type: "event"
-      event: RealtimeEvent
+      type: "event";
+      event: RealtimeEvent;
     }
   | {
-      type: "pong"
-    }
+      type: "pong";
+    };
 
-type RealtimeListener = (event: RealtimeEvent) => void
+type RealtimeListener = (event: RealtimeEvent) => void;
 
-let socket: WebSocket | null = null
-let reconnectTimeout: number | undefined
-let reconnectEnabled = false
-let context: RealtimeContext = {}
-const listeners = new Set<RealtimeListener>()
+let socket: WebSocket | null = null;
+let reconnectTimeout: number | undefined;
+let reconnectEnabled = false;
+let context: RealtimeContext = {};
+const listeners = new Set<RealtimeListener>();
 
 export function connectRealtime() {
-  reconnectEnabled = true
+  reconnectEnabled = true;
 
   if (
     socket &&
     (socket.readyState === WebSocket.OPEN ||
       socket.readyState === WebSocket.CONNECTING)
   ) {
-    return socket
+    return socket;
   }
 
-  const token = getApiAuthToken()
+  const token = getApiAuthToken();
 
   if (!token) {
-    return null
+    return null;
   }
 
-  socket = new WebSocket(buildRealtimeUrl(token))
+  socket = new WebSocket(buildRealtimeUrl(token));
 
   socket.addEventListener("open", () => {
-    sendRealtimeContext()
-  })
+    sendRealtimeContext();
+  });
 
   socket.addEventListener("message", (message) => {
-    const parsed = parseRealtimeMessage(message.data)
+    const parsed = parseRealtimeMessage(message.data);
 
     if (parsed?.type !== "event") {
-      return
+      return;
     }
 
     for (const listener of listeners) {
-      listener(parsed.event)
+      listener(parsed.event);
     }
-  })
+  });
 
   socket.addEventListener("close", () => {
-    socket = null
+    socket = null;
     if (reconnectEnabled) {
-      scheduleRealtimeReconnect()
+      scheduleRealtimeReconnect();
     }
-  })
+  });
 
   socket.addEventListener("error", () => {
-    socket?.close()
-  })
+    socket?.close();
+  });
 
-  return socket
+  return socket;
 }
 
 export function disconnectRealtime() {
-  reconnectEnabled = false
+  reconnectEnabled = false;
 
   if (reconnectTimeout !== undefined) {
-    window.clearTimeout(reconnectTimeout)
-    reconnectTimeout = undefined
+    window.clearTimeout(reconnectTimeout);
+    reconnectTimeout = undefined;
   }
 
-  socket?.close()
-  socket = null
+  socket?.close();
+  socket = null;
 }
 
 export function setRealtimeContext(nextContext: RealtimeContext) {
-  context = nextContext
-  sendRealtimeContext()
+  context = nextContext;
+  sendRealtimeContext();
 }
 
 export function subscribeRealtime(listener: RealtimeListener) {
-  listeners.add(listener)
-  connectRealtime()
+  listeners.add(listener);
+  connectRealtime();
 
   return () => {
-    listeners.delete(listener)
+    listeners.delete(listener);
 
     if (listeners.size === 0) {
-      disconnectRealtime()
+      disconnectRealtime();
     }
-  }
+  };
 }
 
 function scheduleRealtimeReconnect() {
   if (listeners.size === 0 || reconnectTimeout !== undefined) {
-    return
+    return;
   }
 
   reconnectTimeout = window.setTimeout(() => {
-    reconnectTimeout = undefined
-    connectRealtime()
-  }, 1000)
+    reconnectTimeout = undefined;
+    connectRealtime();
+  }, 1000);
 }
 
 function sendRealtimeContext() {
   if (socket?.readyState !== WebSocket.OPEN) {
-    return
+    return;
   }
 
   socket.send(
@@ -140,30 +140,30 @@ function sendRealtimeContext() {
       type: "setContext",
       patientId: context.patientId,
       page: context.page,
-    })
-  )
+    }),
+  );
 }
 
 function parseRealtimeMessage(data: unknown): RealtimeMessage | null {
   if (typeof data !== "string") {
-    return null
+    return null;
   }
 
   try {
-    return JSON.parse(data) as RealtimeMessage
+    return JSON.parse(data) as RealtimeMessage;
   } catch {
-    return null
+    return null;
   }
 }
 
 function buildRealtimeUrl(token: string) {
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getApiBaseUrl();
 
   if (!baseUrl) {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-    return `${protocol}//${window.location.host}/realtime/ws?token=${encodeURIComponent(token)}`
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/realtime/ws?token=${encodeURIComponent(token)}`;
   }
 
-  const websocketUrl = baseUrl.replace(/^http/, "ws")
-  return `${websocketUrl}/realtime/ws?token=${encodeURIComponent(token)}`
+  const websocketUrl = baseUrl.replace(/^http/, "ws");
+  return `${websocketUrl}/realtime/ws?token=${encodeURIComponent(token)}`;
 }

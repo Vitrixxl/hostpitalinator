@@ -3,10 +3,15 @@
 FROM oven/bun:1.3.0 AS web-builder
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY build.ts bunfig.toml components.json eslint.config.js index.html tsconfig.json tsconfig.app.json tsconfig.node.json ./
+COPY scripts ./scripts
 COPY public ./public
 COPY src ./src
 RUN bun run build

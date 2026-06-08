@@ -2,20 +2,22 @@
 
 import * as React from "react"
 
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div
+    <ScrollArea
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className="relative w-full"
     >
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
-    </div>
+      <ScrollBar orientation="horizontal" />
+    </ScrollArea>
   )
 }
 
@@ -91,6 +93,23 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   )
 }
 
+function TableEmptyRow({
+  children,
+  className,
+  colSpan,
+}: React.ComponentProps<"td"> & { colSpan: number }) {
+  return (
+    <TableRow>
+      <TableCell
+        colSpan={colSpan}
+        className={cn("h-28 text-center text-muted-foreground", className)}
+      >
+        {children}
+      </TableCell>
+    </TableRow>
+  )
+}
+
 function TableCaption({
   className,
   ...props
@@ -112,5 +131,6 @@ export {
   TableHead,
   TableRow,
   TableCell,
+  TableEmptyRow,
   TableCaption,
 }
